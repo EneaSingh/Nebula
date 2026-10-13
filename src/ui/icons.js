@@ -41,6 +41,8 @@ const P = {
   pause: '<path d="M9 5v14M15 5v14"/>',
   play: '<path d="M7.5 5.5l11 6.5-11 6.5z"/>',
   play2: '<path d="M3.5 6l8 6-8 6zM12.5 6l8 6-8 6z"/>',
+  sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   play3: '<path d="M1.5 6.5l6.5 5.5-6.5 5.5zM8.75 6.5l6.5 5.5-6.5 5.5zM16 6.5l6.5 5.5L16 17.5z"/>',
   chevron: '<path d="M6 9l6 6 6-6"/>',
   chevronRight: '<path d="M9 6l6 6-6 6"/>',

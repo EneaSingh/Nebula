@@ -183,6 +183,11 @@ export class UI {
     this.toasts.toast(text, severity, ic);
   }
 
+  /** Reflect the sound on/off state in the HUD toggle. */
+  setSoundEnabled(on) {
+    this.hud.renderSound(on);
+  }
+
   showGameOver(result, game) {
     this.mode = 'over';
     this.root.dataset.mode = 'over';
@@ -323,6 +328,8 @@ export class UI {
       this.setSpeed(Number(e.key));
     } else if (e.key === '0' || e.key === 'p' || e.key === 'P') {
       this.setSpeed(0);
+    } else if (e.key === 'm' || e.key === 'M') {
+      this.cb.onToggleSound?.();
     } else if (e.key === 'r' || e.key === 'R') {
       if (this.tree.isOpen) this.tree.close();
       else this.openTree();

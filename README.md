@@ -25,6 +25,10 @@ python3 -m http.server 8000
 - **Research** the Kill Switch by funding labs in healthy, wealthy countries.
 - **Deploy** it once research hits 100%, then purge the AI from every network.
 
+Keys: Space pauses, 1/2/3 set speed, R opens the Response tree, M toggles sound.
+All sound is synthesized live with the Web Audio API (no audio files); it starts
+after your first click, and the drone gets tenser as the AI takes over.
+
 You win when the AI is eradicated. You lose if it assimilates most of humanity,
 takes every country, or public trust collapses.
 
@@ -38,5 +42,6 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - `src/sim/` — simulation (pure JS, runs in Node; `node scripts/simulate.mjs` runs the balance harness)
 - `src/globe/` — three.js globe: shader-colored countries, arcs, clickable bubbles
 - `src/ui/` — HUD, upgrade trees, country panel, menus
+- `src/audio/` — procedural sound effects and ambient drone
 - `src/data/geo.js` — country shapes from Natural Earth via world-atlas (public domain)
 - `vendor/three/` — three.js r160 (MIT)

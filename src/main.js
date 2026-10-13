@@ -3,6 +3,8 @@ import GEO from './data/geo.js';
 import { Game } from './sim/game.js';
 import { Globe } from './globe/globe.js';
 import { UI } from './ui/ui.js';
+import { knownWorld } from './ui/util.js';
+import { Sound } from './audio/sound.js';
 
 const globe = new Globe(document.getElementById('globe'), { geo: GEO });
 
@@ -11,18 +13,33 @@ const defs = new Game({ geo: GEO, seed: 1 }).defs;
 
 let game = null;
 let unsubscribers = [];
+const sound = new Sound();
 
 const ui = new UI(document.getElementById('ui'), {
   defs,
   onStart: startGame,
   onSpeed: (speed) => { if (game) game.speed = speed; },
-  onBuy: (id) => { if (game) game.buy(id); },
-  onCountryAction: (index, actionId) => { if (game) game.doAction(index, actionId); },
+  onBuy: (id) => { if (game && !game.buy(id)) sound.play('deny'); },
+  onCountryAction: (index, actionId) => { if (game && !game.doAction(index, actionId)) sound.play('deny'); },
+  onToggleSound: () => ui.setSoundEnabled(sound.toggle()),
   onSelectCountry: selectCountry,
   onRestart: () => {
     teardown();
     ui.showMenu();
+    sound.setMode('menu');
   },
+});
+ui.setSoundEnabled(sound.enabled);
+
+// Audio may only start after a user gesture; the first click or key unlocks it.
+for (const type of ['pointerdown', 'keydown']) {
+  window.addEventListener(type, () => {
+    sound.unlock();
+    sound.setMode(game ? 'playing' : 'menu');
+  }, { once: true, capture: true });
+}
+document.getElementById('ui').addEventListener('click', (e) => {
+  if (e.target.closest('button, [role="tab"], [role="radio"], summary')) sound.play('click');
 });
 
 function selectCountry(index) {
@@ -36,7 +53,11 @@ globe.onCountryClick = (index) => {
   ui.selectCountry(index);
 };
 globe.onCountryHover = (index, x, y) => ui.hover(index, x, y);
-globe.onBubbleClick = (id) => { if (game) game.collectBubble(id); };
+globe.onBubbleClick = (id) => {
+  if (!game) return;
+  const got = game.collectBubble(id);
+  if (got) sound.play('collect', { kind: got.kind });
+};
 
 function listen(type, fn) {
   game.on(type, fn);
@@ -48,21 +69,51 @@ function teardown() {
   unsubscribers = [];
   if (game) for (const id of game.bubbles.keys()) globe.removeBubble(id, false);
   game = null;
+  audioState = null;
   selectCountry(null);
+}
+
+// Sounds driven by state changes the sim doesn't announce as events.
+let audioState = null;
+function updateAudio() {
+  const known = knownWorld(game);
+  const pop = known.population || 1;
+  sound.setTension(Math.min(1, (known.lost * 2 + known.infected) / pop));
+  const p = game.player;
+  const fallen = game.countries.reduce((n, c) => n + (c.status === 'fallen'), 0);
+  const liberated = game.countries.reduce((n, c) => n + (c.status === 'liberated'), 0);
+  const quarter = Math.floor(Math.min(p.research, 0.999) * 4);
+  if (audioState) {
+    if (fallen > audioState.fallen) sound.play('fallen');
+    if (liberated > audioState.liberated) sound.play('liberated');
+    if (quarter > audioState.quarter) sound.play('milestone');
+  }
+  audioState = { fallen, liberated, quarter };
 }
 
 function startGame({ aiName, threat, difficulty }) {
   teardown();
   game = new Game({ geo: GEO, aiName, threat, difficulty, seed: (Math.random() * 2 ** 31) | 0 });
   listen('transmission', (e) => { if (!e.hidden) globe.addArc(e.from, e.to, e.route); });
-  listen('bubble:add', (b) => globe.addBubble(b));
+  listen('transmission', (e) => { if (!e.hidden) sound.play('transmission'); });
+  listen('bubble:add', (b) => { globe.addBubble(b); sound.play('bubble'); });
   listen('bubble:remove', (e) => globe.removeBubble(e.id, e.collected));
+  let detections = 0;
+  listen('detected', () => sound.play(detections++ === 0 ? 'firstDetection' : 'detected'));
+  listen('evolve', () => { if (detections > 0) sound.play('evolve'); });
+  listen('upgrade', () => sound.play('upgrade'));
+  listen('action', (e) => sound.play('action', e));
+  listen('research:complete', () => sound.play('researchDone'));
   listen('gameover', (result) => {
     game.speed = 0;
     ui.showGameOver(result, game);
+    sound.play(result.won ? 'win' : 'lose');
+    sound.setMode('over');
   });
   ui.bindGame(game);
   ui.hideMenu();
+  sound.unlock();
+  sound.setMode('playing');
 }
 
 // Main loop. Simulation steps are capped so a backgrounded tab doesn't fast-forward months.
@@ -93,6 +144,7 @@ function frame(now) {
   if (game && uiAccum >= 0.125) {
     uiAccum = 0;
     guard('ui', () => ui.update(game));
+    guard('audio', updateAudio);
   }
 }
 requestAnimationFrame(frame);
@@ -100,4 +152,4 @@ requestAnimationFrame(frame);
 ui.showMenu();
 
 // Debug handle for the console / automated tests.
-window.KILLSWITCH = { get game() { return game; }, globe, ui, GEO };
+window.KILLSWITCH = { get game() { return game; }, globe, ui, sound, GEO };

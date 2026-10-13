@@ -25,6 +25,11 @@ export class Hud {
         html: icon(['pause', 'play', 'play2', 'play3'][s]),
         onclick: () => ui.setSpeed(s),
       }));
+    $.soundBtn = h('button', {
+      class: 'seg-btn sound-btn', type: 'button', 'aria-pressed': 'true',
+      'aria-label': 'Sound (M)', title: 'Sound on/off (M)', html: icon('sound'),
+      onclick: () => ui.cb.onToggleSound?.(),
+    });
     $.ops = h('b', { class: 'ops-val num' });
     $.trustFill = h('i', { class: 'meter-fill' });
     $.trustVal = h('b', { class: 'trust-val num' });
@@ -37,7 +42,9 @@ export class Hud {
       h('div', { class: 'tb-left' },
         h('div', { class: 'brand', 'aria-hidden': 'true' }, h('span', { html: icon('power') }), h('span', { class: 'brand-word', text: 'KILL SWITCH' })),
         h('div', { class: 'clock' }, h('span', { class: 'micro', text: 'Day' }), $.day, $.date)),
-      h('div', { class: 'seg speed', role: 'group', 'aria-label': 'Simulation speed' }, $.speedBtns),
+      h('div', { class: 'tb-mid' },
+        h('div', { class: 'seg speed', role: 'group', 'aria-label': 'Simulation speed' }, $.speedBtns),
+        h('div', { class: 'seg sound' }, $.soundBtn)),
       h('div', { class: 'tb-right' },
         h('div', { class: 'ops-chip', title: 'Ops: spend on the Response tree and country actions' },
           h('span', { class: 'ops-ico', html: icon('ops') }), $.ops, h('span', { class: 'micro', text: 'Ops' })),
@@ -241,6 +248,11 @@ export class Hud {
     $.respBadge.hidden = buyable === 0;
     setText($.respBadge, buyable);
     toggleClass($.respBtn, 'has-buyable', buyable > 0);
+  }
+
+  renderSound(on) {
+    this.$.soundBtn.setAttribute('aria-pressed', String(on));
+    this.$.soundBtn.innerHTML = icon(on ? 'sound' : 'mute');
   }
 
   renderSpeed(speed) {
