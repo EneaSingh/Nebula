@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KILL SWITCH UI dev</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="../styles.css">
+  <style>#globe canvas { display: block; width: 100%; height: 100%; cursor: grab; }</style>
+</head>
+<body>
+  <div id="globe"></div>
+  <div id="ui"></div>
+  <script type="module">
+    // UI dev harness: the real UI driven by a mock game and a dot-globe stand-in.
+    // URL params: ?scene=menu|hud|tree|country|dossier|news|gameover|won  &days=N  &tab=research  &c=index
+    import GEO from '../src/data/geo.js';
+    import { UI } from '../src/ui/ui.js';
+    import { MockGame, DEFS } from './mock.js';
+
+    const q = new URLSearchParams(location.search);
+    const scene = q.get('scene') || 'menu';
+    let game = null;
+
+    // ---------- dummy globe ----------
+    const cv = document.createElement('canvas');
+    document.getElementById('globe').append(cv);
+    const ctx = cv.getContext('2d');
+    let rot = -20, W = 0, H = 0, R = 0, hoverIdx = null, selIdx = null;
+    function resize() {
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      W = innerWidth; H = innerHeight; R = Math.min(W, H) * 0.36;
+      cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    addEventListener('resize', resize); resize();
+    function project([lon, lat]) {
+      const l = ((lon - rot) * Math.PI) / 180, p = (lat * Math.PI) / 180;
+      const x = Math.cos(p) * Math.sin(l), y = Math.sin(p), z = Math.cos(p) * Math.cos(l);
+      return [W / 2 + x * R, H / 2 - y * R, z];
+    }
+    function color(i) {
+      const c = game?.countries[i];
+      if (!c || !c.detected) return 'rgba(61,224,255,.55)';
+      return { infected: '#ff2d55', overrun: '#ff3df0', fallen: '#9d6bff', liberated: '#3dff9a' }[c.status] || 'rgba(61,224,255,.8)';
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      const g = ctx.createRadialGradient(W / 2 - R * 0.3, H / 2 - R * 0.3, R * 0.1, W / 2, H / 2, R);
+      g.addColorStop(0, '#0d2a3d'); g.addColorStop(1, '#05111c');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(W / 2, H / 2, R, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(61,224,255,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+      GEO.forEach((c, i) => {
+        const [x, y, z] = project(c.centroid);
+        if (z < 0) return;
+        const r = 1.5 + Math.sqrt(c.area) * 60;
+        ctx.globalAlpha = 0.35 + z * 0.65;
+        ctx.fillStyle = color(i);
+        ctx.beginPath(); ctx.arc(x, y, i === hoverIdx || i === selIdx ? r + 3 : r, 0, 7); ctx.fill();
+        if (i === selIdx) { ctx.strokeStyle = '#fff'; ctx.stroke(); }
+      });
+      ctx.globalAlpha = 1;
+    }
+    function pick(mx, my) {
+      let best = null, bd = 28 * 28;
+      GEO.forEach((c, i) => { const [x, y, z] = project(c.centroid); if (z < 0) return; const d = (x - mx) ** 2 + (y - my) ** 2; if (d < bd) { bd = d; best = i; } });
+      return best;
+    }
+    let drag = null;
+    cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, r: rot, moved: false }; });
+    addEventListener('pointerup', (e) => {
+      if (drag && !drag.moved && e.target === cv) { const i = pick(e.clientX, e.clientY); selectCountry(i); }
+      drag = null;
+    });
+    cv.addEventListener('pointermove', (e) => {
+      if (drag) { if (Math.abs(e.clientX - drag.x) > 4) drag.moved = true; rot = drag.r - (e.clientX - drag.x) * 0.3; }
+      hoverIdx = pick(e.clientX, e.clientY);
+      ui.hover(hoverIdx, e.clientX, e.clientY);
+    });
+    cv.addEventListener('pointerleave', () => { hoverIdx = null; ui.hover(null); });
+
+    // ---------- wiring (mirrors src/main.js) ----------
+    const ui = new UI(document.getElementById('ui'), {
+      defs: DEFS,
+      onStart: startGame,
+      onSpeed: (s) => { if (game) game.speed = s; },
+      onBuy: (id) => game?.buy(id),
+      onCountryAction: (i, id) => game?.doAction(i, id),
+      onSelectCountry: selectCountry,
+      onRestart: () => { game = null; selectCountry(null); ui.showMenu(); },
+    });
+    function selectCountry(i) { selIdx = i; ui.selectCountry(i); }
+    function startGame(sel) {
+      game = new MockGame({ ...sel, seed: 42 });
+      game.on('gameover', (r) => { game.speed = 0; ui.showGameOver(r, game); });
+      ui.bindGame(game);
+      ui.hideMenu();
+    }
+
+    let last = performance.now(), acc = 0;
+    function frame(now) {
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      if (!drag) rot += dt * 2;
+      if (game && game.status === 'playing') game.tick(dt);
+      draw();
+      acc += dt;
+      if (game && acc >= 0.125) { acc = 0; ui.update(game); }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // ---------- scenes ----------
+    ui.showMenu();
+    if (scene !== 'menu') {
+      startGame({ aiName: 'NEXUS', threat: DEFS.threats[0].id, difficulty: 'normal' });
+      const days = Number(q.get('days') || (scene.startsWith('game') || scene === 'won' ? 140 : 60));
+      // fast-forward with some purchases so the tree has all node states
+      for (let d = 0; d < days; d++) {
+        game.advance(1);
+        for (const id of ['r_field', 'c_monitor', 'r_grants', 'o_brief', 'c_firewall', 'c_airgap', 'r_sandbox']) if (game.canBuy(id).ok) game.buy(id);
+      }
+      game.player.ops = Math.max(game.player.ops, 11);
+      const ci = Number(q.get('c') ?? GEO.findIndex((g) => g.name === 'China'));
+      if (scene === 'country' || scene === 'country2') {
+        const c = game.countries[ci];
+        if (scene === 'country') { c.detected = true; c.quarantined = true; c.labLevel = 2; }
+        selectCountry(scene === 'country2' ? GEO.findIndex((g) => g.name === 'Brazil') : ci);
+      }
+      if (scene === 'tree') ui.openTree(q.get('tab') || 'containment');
+      if (scene === 'dossier') ui.openPanel('dossier');
+      if (scene === 'news') ui.openPanel('news');
+      if (scene === 'gameover' || scene === 'won') {
+        const won = scene === 'won';
+        game.status = won ? 'won' : 'lost';
+        game.speed = 0;
+        ui.showGameOver({ won, reason: won ? 'The Kill Switch propagated to every network. NEXUS is offline.' : 'Fewer than 2% of humans remain outside AI control.', stats: game.stats }, game);
+      }
+      if (q.get('paused')) game.speed = 0;
+    }
+    window.DEV = { ui, get game() { return game; }, selectCountry };
+  </script>
+</body>
+</html>
