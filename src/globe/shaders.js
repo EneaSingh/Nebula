@@ -270,7 +270,7 @@ void main() {
     float hs = fract((hp.x + hp.y) * 0.5);
     float aa = fwidth(hp.y) * 0.7 + 0.02;
     float hatch = smoothstep(0.5 - aa, 0.5, hs) - smoothstep(0.78, 0.78 + aa, hs);
-    float scan = pow(fract(ll.y * 0.08 - tt * 0.1), 24.0);
+    float scan = pow(fract(ll.y * 0.03 - tt * 0.04), 60.0);
     vec3 cy = srgb(vec3(0.24, 0.88, 1.0));
     emis += cy * quar * (hatch * hfade * 0.22 + (1.0 - hfade) * 0.06 + scan * 0.35);
     col = mix(col, col * 0.8 + cy * 0.03, quar);
@@ -285,7 +285,7 @@ void main() {
   }
 
   // flash on state change
-  emis += srgb(vec3(1.0, 0.6, 0.8)) * flash * 0.35;
+  emis += srgb(vec3(1.0, 0.18, 0.33)) * flash * flash * 0.22;
 
   // ---- borders & coasts ----
   vec3 cyan = srgb(vec3(0.24, 0.88, 1.0));

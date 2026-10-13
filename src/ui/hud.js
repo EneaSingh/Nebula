@@ -210,7 +210,7 @@ export class Hud {
       setText($.resLabel, 'Kill Switch research');
       setText($.resPct, fmtPct(p.research, 1));
       const rate = (p.researchRate || 0) * 100;
-      setText($.resRate, `+${rate < 1 ? rate.toFixed(2) : rate.toFixed(1)}%/day`);
+      setText($.resRate, `+${rate === 0 ? '0' : rate < 0.1 ? rate.toFixed(3) : rate < 1 ? rate.toFixed(2) : rate.toFixed(1)}%/day`);
       setWidth($.resFill, p.research);
       setWidth($.resDeploy, 0);
     }
