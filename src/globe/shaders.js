@@ -304,28 +304,32 @@ void main() {
   col *= 1.0 + hovW * 0.45 + selW * 0.25;
   emis += cyan * hovW * 0.04;
   float outline = 0.0, hovLine = 0.0;
-#ifndef LOW_QUALITY
+#ifdef LOW_QUALITY
+  const int OT = 6;
+#else
+  const int OT = 12;
+#endif
   vec2 px = fwidth(tc);
   vec2 margin = px * 8.0;
   bool doSel = uSel > 0.5 && inBox(tc, uSelBox, margin);
   bool doHov = uHover > 0.5 && uHover != uSel && inBox(tc, uHoverBox, margin);
   if (doSel || doHov) {
     float ms = 0.0, mh = 0.0;
-    for (int k = 0; k < 12; k++) {
-      float a = float(k) * 0.5236 + 0.26;
+    for (int k = 0; k < OT; k++) {
+      float a = float(k) * (6.2832 / float(OT)) + 0.26;
+#ifdef LOW_QUALITY
+      float rad = 3.5;
+#else
       float rad = mod(float(k), 2.0) < 0.5 ? 2.5 : 5.0;
+#endif
       float tid = idAt(tc + vec2(cos(a), sin(a)) * px * rad);
       ms += step(abs(tid - uSel), 0.5);
       mh += step(abs(tid - uHover), 0.5);
     }
-    ms /= 12.0; mh /= 12.0;
+    ms /= float(OT); mh /= float(OT);
     if (doSel) outline = 1.0 - abs(2.0 * ms - 1.0);
     if (doHov) hovLine = 1.0 - abs(2.0 * mh - 1.0);
   }
-#else
-  outline = selW * (1.0 - selW) * 4.0;
-  hovLine = hovW * (1.0 - hovW) * 4.0;
-#endif
   vec3 selC = vec3(1.0);
   if (outline > 0.0) {
     vec3 p = normalize(vObj);
