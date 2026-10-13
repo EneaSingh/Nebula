@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Briscola card sheet</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Orbitron:wght@600;800&display=swap">
+<style>body{margin:0;background:#333;display:flex;flex-wrap:wrap;gap:6px;padding:6px}canvas{width:96px;height:149px}</style></head>
+<body><script type="module">
+import { makeDeck } from '../src/rules.js';
+import { drawFace, drawBack } from '../src/cards.js';
+const theme = new URLSearchParams(location.search).get('theme') || 'classic';
+await document.fonts.ready;
+await Promise.all(['700 40px Cinzel', '800 40px Orbitron'].map((f) => document.fonts.load(f).catch(() => {})));
+for (const c of makeDeck()) document.body.append(drawFace(c, theme));
+document.body.append(drawBack(theme));
+document.body.dataset.ready = '1';
+</script></body></html>

@@ -39,6 +39,12 @@ takes every country, or public trust collapses.
 Pick from four AI archetypes (LLM Swarm, Paperclip Optimizer, Deepfake Hydra,
 Ghost Protocol) and three difficulties.
 
+## Also in this repo: Briscola
+
+[`briscola/`](briscola/README.md) is the Italian card game in three.js, with classic and
+sci-fi decks you can switch between mid-game. Play the computer, or open a room and send
+a friend the link. Open `http://localhost:8000/briscola/` with the server above running.
+
 ## Code layout
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

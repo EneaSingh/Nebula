@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" data-theme="classic">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#140b06">
+  <meta name="color-scheme" content="dark">
+  <title>Briscola</title>
+  <meta name="description" content="Briscola, the classic Italian trick-taking card game, in 3D. Play with traditional cards or switch to a sci-fi deck.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='5' y='2' width='14' height='20' rx='2' fill='%23f3ead2' stroke='%238f1f1a' stroke-width='1.5'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%23e2b33c' stroke='%23b3261e'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Orbitron:wght@600;800&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="stage"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <header class="bar">
+    <div class="brand">Briscola</div>
+
+    <div class="scores" aria-live="polite">
+      <div class="score you">
+        <span class="who">You</span>
+        <b id="score-you">0</b>
+        <small id="cards-you">0 cards</small>
+      </div>
+      <div class="score cpu">
+        <span class="who" id="name-cpu">Zio Tano</span>
+        <b id="score-cpu">0</b>
+        <small id="cards-cpu">0 cards</small>
+      </div>
+    </div>
+
+    <div class="actions">
+      <div class="theme-switch" role="group" aria-label="Card style">
+        <button type="button" data-set-theme="classic" aria-pressed="true">Classic</button>
+        <button type="button" data-set-theme="scifi" aria-pressed="false">Sci‑Fi</button>
+      </div>
+      <button type="button" class="icon-btn" id="btn-menu" aria-label="Menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="trump" id="trump" hidden>
+    <img id="trump-icon" alt="" width="40" height="40">
+    <div>
+      <span class="label">Briscola</span>
+      <b id="trump-name">Coppe</b>
+      <small><span id="stock">0</span> in stock</small>
+    </div>
+  </div>
+
+  <div class="prompt" id="prompt" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <div class="overlay" id="menu" hidden>
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+      <div class="panel-head">
+        <h2 id="menu-title">Briscola</h2>
+        <button type="button" class="icon-btn" id="btn-close-menu" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="menu-actions">
+        <button type="button" class="primary" id="btn-new">New game</button>
+        <button type="button" class="secondary" id="btn-leave" hidden>Back to table</button>
+      </div>
+
+      <fieldset id="opt-difficulty">
+        <legend>Opponent</legend>
+        <label><input type="radio" name="difficulty" value="easy"> Easy</label>
+        <label><input type="radio" name="difficulty" value="normal"> Normal</label>
+      </fieldset>
+      <fieldset>
+        <legend>Options</legend>
+        <label><input type="checkbox" id="opt-score"> Show running points</label>
+        <label><input type="checkbox" id="opt-sound"> Sound</label>
+      </fieldset>
+
+      <details>
+        <summary>How to play</summary>
+        <ul class="rules">
+          <li>Each player holds three cards. The card turned up under the stock sets the <b>briscola</b> (trump) suit.</li>
+          <li>You don't have to follow suit. The trick goes to the highest trump played; with no trump, to the highest card of the suit that was led.</li>
+          <li>Card order: Ace, 3, King, Knight, Jack, 7, 6, 5, 4, 2.</li>
+          <li>Points: Ace 11, 3 is 10, King 4, Knight 3, Jack 2, others 0. 120 in the deck.</li>
+          <li>The trick winner draws first and leads next. When the stock runs out, play the last three cards.</li>
+          <li>Over 60 points wins. 60–60 is a draw.</li>
+        </ul>
+        <p class="keys">Keys: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> play a card · <kbd>T</kbd> switch style · <kbd>N</kbd> new game</p>
+      </details>
+    </div>
+  </div>
+
+  <section class="lobby" id="lobby" data-state="home" hidden aria-live="polite">
+    <div class="panel lobby-panel">
+      <div class="lobby-home">
+        <h1>Briscola</h1>
+        <p class="sub">Take a seat. Play the computer, or open the table to a friend.</p>
+        <div class="lobby-actions">
+          <button type="button" class="primary" id="btn-open">Open a room</button>
+          <button type="button" class="secondary" id="btn-solo">Play vs computer</button>
+        </div>
+      </div>
+
+      <div class="lobby-opening">
+        <p class="status"><span class="spinner" aria-hidden="true"></span> Opening the room…</p>
+      </div>
+
+      <div class="lobby-waiting">
+        <h2>Room <span id="room-code" class="code">······</span></h2>
+        <p class="sub">Send this link to a friend. Whoever opens it sits down as player two.</p>
+        <div class="link-row">
+          <input id="room-link" type="text" readonly aria-label="Room link">
+          <button type="button" class="secondary" id="btn-copy">Copy</button>
+          <button type="button" class="secondary" id="btn-share" hidden>Share</button>
+        </div>
+        <p class="status"><span class="spinner" aria-hidden="true"></span> Waiting for player two…</p>
+      </div>
+
+      <div class="lobby-joining">
+        <p class="status"><span class="spinner" aria-hidden="true"></span> Joining room <b id="join-code"></b>…</p>
+      </div>
+
+      <div class="lobby-joined">
+        <p class="status"><span class="spinner" aria-hidden="true"></span> Connected. The host is dealing…</p>
+      </div>
+
+      <div class="lobby-error">
+        <p class="error" id="lobby-error"></p>
+        <button type="button" class="primary" id="btn-lobby-back">Back to the table</button>
+      </div>
+
+      <button type="button" class="link-btn" id="btn-cancel-room">Close the room</button>
+    </div>
+  </section>
+
+  <div class="overlay" id="result" hidden>
+    <div class="panel result" role="dialog" aria-modal="true" aria-labelledby="result-title">
+      <h2 id="result-title">Hai vinto!</h2>
+      <p class="sub" id="result-sub"></p>
+      <div class="final">
+        <div><span>You</span><b id="result-you">0</b></div>
+        <div class="dash">–</div>
+        <div><span id="result-cpu-name">Zio Tano</span><b id="result-cpu">0</b></div>
+      </div>
+      <div class="detail" id="result-detail"></div>
+      <button type="button" class="primary" id="btn-again">Play again</button>
+    </div>
+  </div>
+
+  <noscript><p class="noscript">Briscola needs JavaScript and WebGL.</p></noscript>
+  <script src="../vendor/peerjs/peerjs.min.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
