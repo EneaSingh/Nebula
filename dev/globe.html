@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Globe Harness</title>
+<style>
+  :root { color-scheme: dark; --fg: #cfefff; --dim: #6c8a99; --bg: #020409; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; }
+  #globe { position: fixed; inset: 0; }
+  #hud { position: fixed; left: 8px; top: 8px; padding: 8px 10px; background: rgba(2,10,20,.75); border: 1px solid #12394a; border-radius: 6px; pointer-events: auto; max-width: 320px; }
+  #hud button { font: inherit; background: #08202c; color: var(--fg); border: 1px solid #1e5a70; border-radius: 4px; padding: 2px 6px; margin: 2px 2px 0 0; cursor: pointer; }
+  #tip { position: fixed; pointer-events: none; padding: 3px 6px; background: rgba(0,0,0,.8); border: 1px solid #3de0ff; border-radius: 4px; display: none; }
+  .k { color: var(--dim); }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<div id="globe"></div>
+<div id="hud">
+  <div><span class="k">fps</span> <span id="fps">-</span> <span class="k">day</span> <span id="day">-</span></div>
+  <div><span class="k">hover</span> <span id="hov">-</span></div>
+  <div><span class="k">click</span> <span id="clk">-</span></div>
+  <div>
+    <button id="menu">menu/game</button><button id="pause">pause</button><button id="arc">arcs</button><button id="bub">bubble</button><button id="sel">focus BRA</button>
+  </div>
+</div>
+<div id="tip"></div>
+<script type="module" src="./globe-harness.js"></script>
+</body>
+</html>
