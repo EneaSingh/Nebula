@@ -23,7 +23,7 @@ export const K = {
   link: 0.35, linkExp: 0.5, land: 1.0, cable: 0.8, sat: 0.035,
   ambientArcs: 2.0,
   // takeover (assimilation) per day of infected, before traits
-  tau: 0.0018,
+  tau: 0.0018, lostSpread: 0.15,
   fallenAt: 0.5,
   // detection
   detect: 0.9, overtLost: 0.002,
@@ -256,9 +256,10 @@ export class Game {
     const T = this.T, D = this.D, aiM = this.aiM, plM = this.plM, p = this.player;
     const betaG = K.beta * D.aiSpread * T.spread * aiM.beta * plM.beta;
     const esc = this.ai.escalation;
-    const tauG = K.tau * D.aiTakeover * T.takeover * aiM.takeover * plM.takeover * (0.08 + 0.92 * esc);
+    const tauG = K.tau * D.aiTakeover * T.takeover * aiM.takeover * plM.takeover * ((T.takeoverFloor || 0.08) + (1 - (T.takeoverFloor || 0.08)) * esc);
     const trustEff = 0.4 + 0.6 * p.trust;
     const shutdownBeta = 0.06 + 0.5 * aiM.shutdownBypass;
+    const lostSpread = T.lostSpread ?? K.lostSpread;
     for (const c of this.countries) {
       if (!c.aiPresent || !c.playable) continue;
       const P = c.population, i = c.index;
@@ -283,7 +284,7 @@ export class Game {
         if (!c.killSwitchDeployed && I > 50) dI -= kill * (I - 50);
         tau *= aiM.shutdownBypass + (1 - aiM.shutdownBypass) * (plM.shutdownEff ? 0.15 : 0.5);
       }
-      dI += beta * I * (H / P);
+      dI += beta * (I + lostSpread * L) * (H / P);
       const dL = tau * I;
       I += (dI - dL) * dt;
       L += dL * dt;
@@ -306,6 +307,7 @@ export class Game {
     const routeM = { wireless: K.land * aiM.land, cable: K.cable * aiM.cable * plM.cable };
     const satBase = K.sat * aiM.sat * plM.sat * D.aiSpread * T.spread;
     const countries = this.countries;
+    const lostSpread = T.lostSpread ?? K.lostSpread;
     let satTotal = 0;
     const sources = [];
     for (const c of countries) {
@@ -314,7 +316,7 @@ export class Game {
     }
     for (const c of sources) {
       const i = c.index;
-      const g = Math.pow(c.infected / c.population, K.linkExp);
+      const g = Math.pow(Math.min(1, (c.infected + lostSpread * c.lost) / c.population), K.linkExp);
       const outGate = this._gate(c) * (c.killSwitchDeployed ? 0.3 : 1) * (0.3 + 0.7 * c.digital);
       if (outGate <= 0) continue;
       for (const l of this.links[i]) {

@@ -54,6 +54,7 @@ uniform vec2 uIdSize;
 uniform sampler2D uState;
 uniform sampler2D uDetail;
 uniform sampler2D uGlow;
+uniform sampler2D uNoise;
 uniform float uTime;
 uniform vec3 uLightDir;
 uniform vec3 uAtmo;
@@ -71,6 +72,7 @@ varying vec3 vWorldPos;
 
 ${COMMON}
 
+vec4 nz(vec2 p) { return texture2D(uNoise, p); }
 float idAt(vec2 tc) { return floor(texture2D(uIds, tc).r * 255.0 + 0.5); }
 vec4 st0(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.25)); }
 vec4 st1(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.75)); }
@@ -163,7 +165,7 @@ void main() {
 
   // ---- ocean ----
   vec3 ocean = srgb(vec3(0.010, 0.040, 0.075));
-  ocean += srgb(vec3(0.02, 0.06, 0.10)) * vnoise(vObj * 4.0 + vec3(uTime * 0.02));
+  ocean += srgb(vec3(0.02, 0.06, 0.10)) * nz(tc * vec2(4.0, 2.0) + vec2(uTime * 0.002, 0.0)).a;
   // lat/long grid every 15 degrees
   vec2 gd = abs(fract(ll / 15.0 + 0.5) - 0.5) * 15.0;
   float gridL = 1.0 - smoothstep(0.0, gw.x * 1.5, gd.x * cos(radians(ll.y)) / max(cos(radians(ll.y)), 0.15));
@@ -186,7 +188,7 @@ void main() {
 
   // ---- land base ----
   vec3 col = srgb(vec3(0.035, 0.16, 0.21));
-  float relief = vnoise(vObj * 9.0) * 0.6 + vnoise(vObj * 23.0) * 0.4;
+  float relief = nz(tc * vec2(6.0, 3.0)).g * 0.6 + nz(tc * vec2(16.0, 8.0)).a * 0.4;
   col *= 0.75 + 0.5 * relief;
   col = mix(col, srgb(vec3(0.16, 0.24, 0.30)), ice * 0.65);
   // dot matrix
@@ -202,8 +204,8 @@ void main() {
   vec3 emis = vec3(0.0);
   float infV = inf * (1.0 - ks * 0.85);
   if (infV > 0.002) {
-    float cn = fbm3(vObj * 5.5 + vec3(0.0, tt * 0.025, tt * 0.015));
-    float thr = mix(0.78, 0.18, infV);
+    float cn = mix(nz(tc * vec2(8.0, 4.0) + vec2(tt * 0.0016, tt * 0.0011)).r, nz(tc * vec2(18.0, 9.0) - vec2(tt * 0.0021, 0.0)).g, 0.3);
+    float thr = mix(0.92, 0.02, infV);
     float m = smoothstep(thr - 0.06, thr + 0.03, cn);
     float edge = 1.0 - smoothstep(0.0, 0.035, abs(cn - thr));
     float pulse = 0.5 + 0.5 * sin(tt * 2.6 - cn * 26.0);
@@ -212,15 +214,15 @@ void main() {
     col = mix(col, dark * light + dark * 0.4, min(1.0, infV * 0.9 + 0.12));
     col = mix(col, mix(dark, hot, 0.35 + 0.45 * pulse) * (0.55 + 0.45 * light), m);
     // veins of corrupted data
-    float vein = 1.0 - smoothstep(0.0, 0.05, abs(fbm3(vObj * 14.0 + 3.1) - 0.5));
+    float vein = smoothstep(0.86, 0.97, nz(tc * vec2(24.0, 12.0) + vec2(0.0, tt * 0.001)).b);
     emis += hot * vein * m * (0.25 + 0.35 * pulse);
     emis += srgb(vec3(1.0, 0.24, 0.94)) * edge * (0.45 + 0.4 * pulse) * smoothstep(0.0, 0.08, infV);
   }
 
   // ---- lost / assimilated: the machine's circuitry ----
   if (lost > 0.002) {
-    float ln = fbm3(vObj * 4.0 + 11.7);
-    float lthr = mix(0.80, 0.12, lost);
+    float ln = nz(tc * vec2(6.0, 3.0) + vec2(0.31, 0.17)).r;
+    float lthr = mix(0.94, 0.0, lost);
     float lm = smoothstep(lthr - 0.04, lthr + 0.04, ln);
     vec2 cp = bandGrid(ll, 0.55, 12.0);
     vec3 ci = circuit(cp, tt);
@@ -355,7 +357,7 @@ void main() {
   vec3 V = normalize(cameraPosition - vWorldPos);
   float d = -dot(normalize(vWorldNormal), V); // back faces: 0 at shell rim -> uEdge at globe limb
   float g = clamp(d / uEdge, 0.0, 1.0);
-  float a = pow(g, 4.0);
+  float a = pow(g, 5.0);
   float lit = 0.45 + 0.55 * smoothstep(-0.6, 0.6, dot(normalize(vWorldNormal), uLightDir) * -1.0 + 0.2);
   gl_FragColor = vec4(uColor * a * lit * 0.75, 1.0);
   #include <tonemapping_fragment>
@@ -395,26 +397,24 @@ void main() {
 `;
 
 export const skyVertex = /* glsl */ `
-varying vec3 vDir;
+varying vec3 vCol;
+${COMMON}
 void main() {
-  vDir = normalize(position);
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_Position = projectionMatrix * mv;
+  vec3 d = normalize(position);
+  float n1 = fbm3(d * 2.2 + vec3(3.0, 1.0, 0.0));
+  float n2 = fbm3(d * 3.7 + vec3(-7.0, 2.0, 5.0));
+  vec3 c = srgb(vec3(0.006, 0.010, 0.022));
+  c += srgb(vec3(0.10, 0.04, 0.18)) * smoothstep(0.50, 0.80, n1) * 0.35;
+  c += srgb(vec3(0.02, 0.12, 0.18)) * smoothstep(0.52, 0.82, n2) * 0.30;
+  vCol = c;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
 export const skyFragment = /* glsl */ `
-uniform float uTime;
-varying vec3 vDir;
-${COMMON}
+varying vec3 vCol;
 void main() {
-  vec3 d = normalize(vDir);
-  float n1 = fbm3(d * 2.2 + vec3(3.0, 1.0, 0.0));
-  float n2 = fbm3(d * 3.7 + vec3(-7.0, 2.0, 5.0));
-  vec3 c = srgb(vec3(0.006, 0.010, 0.022));
-  c += srgb(vec3(0.10, 0.04, 0.18)) * smoothstep(0.52, 0.85, n1) * 0.35;
-  c += srgb(vec3(0.02, 0.12, 0.18)) * smoothstep(0.55, 0.88, n2) * 0.30;
-  gl_FragColor = vec4(c, 1.0);
+  gl_FragColor = vec4(vCol, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

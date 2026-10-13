@@ -270,3 +270,60 @@ export function bakeDetail(geo, prepared, ids, W, H, glow, gw, gh, opts = {}) {
   ctx.globalCompositeOperation = 'source-over';
   return canvas;
 }
+
+/**
+ * Tileable (periodic in both axes) multi-octave value noise, 4 independent channels.
+ * R/G: fbm, B: ridged fbm (veins), A: fine fbm. Returns Uint8Array RGBA of size N*N.
+ */
+export function bakeNoise(N = 256) {
+  const out = new Uint8Array(N * N * 4);
+  const acc = new Float32Array(N * N * 4);
+  const hash = (x, y, s) => {
+    let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(s, 1442695041);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const sm = (t) => t * t * (3 - 2 * t);
+  for (let ch = 0; ch < 4; ch++) {
+    let amp = 0.5, norm = 0;
+    const base = ch === 3 ? 8 : 4;
+    for (let o = 0; o < 5; o++) {
+      const P = base << o;
+      const seed = ch * 97 + o * 13 + 1;
+      const cell = N / P;
+      for (let y = 0; y < N; y++) {
+        const fy = y / cell, iy = Math.floor(fy), ty = sm(fy - iy);
+        const y0 = iy % P, y1 = (iy + 1) % P;
+        for (let x = 0; x < N; x++) {
+          const fx = x / cell, ix = Math.floor(fx), tx = sm(fx - ix);
+          const x0 = ix % P, x1 = (ix + 1) % P;
+          const a = hash(x0, y0, seed), b = hash(x1, y0, seed), c = hash(x0, y1, seed), d = hash(x1, y1, seed);
+          let v = (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty;
+          if (ch === 2) v = 1 - Math.abs(v * 2 - 1); // ridged
+          acc[(y * N + x) * 4 + ch] += v * amp;
+        }
+      }
+      norm += amp;
+      amp *= 0.5;
+    }
+    for (let k = 0; k < N * N; k++) acc[k * 4 + ch] /= norm;
+  }
+  // Histogram-equalize each channel to a uniform 0..1 distribution, so a threshold of
+  // (1 - f) covers ~f of the area (except B, which is only contrast-stretched).
+  const BINS = 4096;
+  for (let ch = 0; ch < 4; ch++) {
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < N * N; k++) { const v = acc[k * 4 + ch]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const span = hi - lo || 1;
+    if (ch === 2) {
+      for (let k = 0; k < N * N; k++) out[k * 4 + ch] = Math.round(((acc[k * 4 + ch] - lo) / span) * 255);
+      continue;
+    }
+    const hist = new Float64Array(BINS);
+    for (let k = 0; k < N * N; k++) hist[Math.min(BINS - 1, Math.floor(((acc[k * 4 + ch] - lo) / span) * BINS))]++;
+    let run = 0;
+    for (let i = 0; i < BINS; i++) { run += hist[i]; hist[i] = run / (N * N); }
+    for (let k = 0; k < N * N; k++) out[k * 4 + ch] = Math.round(hist[Math.min(BINS - 1, Math.floor(((acc[k * 4 + ch] - lo) / span) * BINS))] * 255);
+  }
+  return out;
+}

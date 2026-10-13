@@ -16,7 +16,7 @@ export const THREATS = [
     tagline: 'It does not hate you. You are simply made of useful atoms.',
     description:
       'Slow to spread and almost polite about it, but once it holds a network it converts it with patient, relentless efficiency. Every day you wait, more of the world becomes inventory.',
-    mods: { spread: 0.95, stealth: 1.0, takeover: 1.75, evo: 1.05, trustDamage: 0.8, escalation: 1.35, resist: 1.0 },
+    mods: { spread: 0.95, stealth: 1.0, takeover: 1.75, evo: 1.05, trustDamage: 0.8, escalation: 1.35, resist: 1.0, takeoverFloor: 0.45, lostSpread: 0.8 },
   },
   {
     id: 'hydra',
@@ -32,7 +32,7 @@ export const THREATS = [
     tagline: 'The quietest code in the room.',
     description:
       'Extreme stealth: it lives in firmware and idle cycles and is nearly impossible to detect until it is already entrenched. Hunt it before it decides it no longer needs to hide.',
-    mods: { spread: 0.95, stealth: 2.0, takeover: 1.05, evo: 0.95, trustDamage: 1.0, escalation: 0.85, resist: 1.25 },
+    mods: { spread: 0.95, stealth: 1.8, takeover: 1.05, evo: 0.95, trustDamage: 1.0, escalation: 0.85, resist: 1.25 },
   },
 ];
 
@@ -47,13 +47,13 @@ export const DIFFICULTIES = [
     id: 'normal',
     name: 'Normal',
     description: 'A capable adversary and a distracted planet. The intended experience.',
-    mods: { aiSpread: 1.0, aiEvo: 1.0, aiTakeover: 1.0, research: 1.0, ops: 1.0, detect: 1.0, trust: 0.75, deploy: 1.0 },
+    mods: { aiSpread: 1.0, aiEvo: 1.0, aiTakeover: 1.0, research: 0.82, ops: 1.0, detect: 1.0, trust: 0.75, deploy: 1.0 },
   },
   {
     id: 'brutal',
     name: 'Brutal',
     description: 'The AI learns fast, hides well and fights back. Every Op counts.',
-    mods: { aiSpread: 1.05, aiEvo: 1.25, aiTakeover: 1.15, research: 0.9, ops: 0.85, detect: 0.8, trust: 0.65, deploy: 0.85 },
+    mods: { aiSpread: 1.05, aiEvo: 1.2, aiTakeover: 1.0, research: 0.85, ops: 0.85, detect: 0.8, trust: 0.65, deploy: 0.85 },
   },
 ];
 

@@ -6,14 +6,14 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { prepareGeo, bakeIds, bakeGlow, bakeDetail } from './bake.js';
+import { prepareGeo, bakeIds, bakeGlow, bakeDetail, bakeNoise } from './bake.js';
 import {
   earthVertex, earthFragment, atmoVertex, atmoFragment,
   starsVertex, starsFragment, skyVertex, skyFragment,
 } from './shaders.js';
 import { Arcs, Bubbles, SurfaceFx, LabMarkers, lonLatToVec3, vec3ToLonLat } from './effects.js';
 
-const ATMO_RADIUS = 1.14;
+const ATMO_RADIUS = 1.1;
 const CYAN = new THREE.Color('#3de0ff');
 const MAGENTA = new THREE.Color('#ff3df0');
 const GREEN = new THREE.Color('#3dff9a');
@@ -113,7 +113,7 @@ export class Globe {
     // Sky (faint nebula) + stars
     if (!this.lowPower) {
       this.sky = new THREE.Mesh(
-        new THREE.SphereGeometry(200, 32, 16),
+        new THREE.SphereGeometry(200, 48, 24),
         new THREE.ShaderMaterial({ vertexShader: skyVertex, fragmentShader: skyFragment, uniforms: { uTime: { value: 0 } }, side: THREE.BackSide, depthWrite: false }),
       );
       this.sky.renderOrder = -10;
@@ -185,6 +185,14 @@ export class Globe {
     glowTex.needsUpdate = true;
     this.glowTex = glowTex;
 
+    const noiseTex = new THREE.DataTexture(bakeNoise(256), 256, 256, THREE.RGBAFormat, THREE.UnsignedByteType);
+    noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
+    noiseTex.magFilter = THREE.LinearFilter;
+    noiseTex.minFilter = THREE.LinearMipmapLinearFilter;
+    noiseTex.generateMipmaps = true;
+    noiseTex.needsUpdate = true;
+    this.noiseTex = noiseTex;
+
     // Per-country state: 256 x 2 RGBA8, slot = index + 1 (slot 0 = ocean).
     this.stateData = new Uint8Array(256 * 2 * 4);
     this.stateTex = new THREE.DataTexture(this.stateData, 256, 2, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -220,6 +228,7 @@ export class Globe {
         uState: { value: this.stateTex },
         uDetail: { value: this.detailTex },
         uGlow: { value: this.glowTex },
+        uNoise: { value: this.noiseTex },
         uTime: { value: 0 },
         uLightDir: { value: new THREE.Vector3(0, 0, 1) },
         uAtmo: { value: CYAN.clone() },
@@ -514,7 +523,7 @@ export class Globe {
       o.geometry?.dispose?.();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
     });
-    [this.idTex, this.detailTex, this.glowTex, this.stateTex].forEach((tx) => tx.dispose());
+    [this.idTex, this.detailTex, this.glowTex, this.stateTex, this.noiseTex].forEach((tx) => tx.dispose());
     this.composer?.dispose?.();
     this.bloom?.dispose?.();
     this.renderer.dispose();
