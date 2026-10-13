@@ -453,10 +453,11 @@ export class TableView {
     this.portrait = aspect < 0.9;
     // Keep the play field (about 11.5 x 10 units) in view at any aspect.
     const vt = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const needW = 6.1 / (vt * aspect);
+    // Portrait looks down more steeply so the table fills the tall screen.
+    const needW = (this.portrait ? 5.0 : 6.1) / (vt * aspect);
     const needH = 6.4 / vt;
-    const dist = Math.max(needW, needH) * (this.portrait ? 0.92 : 1);
-    const dir = new THREE.Vector3(0, 1.25, 1).normalize();
+    const dist = this.portrait ? needW : Math.max(needW, needH);
+    const dir = new THREE.Vector3(0, this.portrait ? 2.1 : 1.25, 1).normalize();
     this.lookAt = new THREE.Vector3(0, 0, this.portrait ? 0.9 : 0.55);
     this.camera.position.copy(this.lookAt).addScaledVector(dir, dist);
     this.camera.lookAt(this.lookAt);
@@ -624,7 +625,7 @@ export class TableView {
     this.hemi.intensity = THREE.MathUtils.lerp(A.hemiI, B.hemiI, k);
     this.key.color.copy(A.key).lerp(B.key, k);
     this.key.intensity = THREE.MathUtils.lerp(A.keyI, B.keyI, k);
-    this.rimA.intensity = this.rimB.intensity = 30 * k;
+    this.rimA.intensity = this.rimB.intensity = 10 * k;
     this.stars.material.opacity = k;
     for (const r of this.rings) r.material.opacity = r.material.userData.o * k;
     this.scan.material.opacity = 0.6 * k;

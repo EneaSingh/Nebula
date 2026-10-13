@@ -204,9 +204,9 @@ html[data-theme="scifi"] .prompt { border-radius: var(--radius); }
   white-space: nowrap;
 }
 .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-.toast.good { color: var(--good); }
-.toast.bad { color: var(--bad); }
-.toast.trump { color: var(--accent); }
+.toast.is-good { color: var(--good); }
+.toast.is-bad { color: var(--bad); }
+.toast.is-trump { color: var(--accent); }
 
 /* ------------------------------------------------------------- overlays */
 .overlay {

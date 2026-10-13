@@ -55,8 +55,10 @@ const pose = {
   hand(s, i, n) {
     const mid = (n - 1) / 2;
     if (s === 0) {
+      // Tilt the hand to face the camera (which looks down more steeply in portrait).
       const gap = view.portrait ? 1.08 : 1.22;
-      return [v3((i - mid) * gap, 1.25 - Math.abs(i - mid) * 0.06, 3.35), v3(FACE_UP + 0.95, 0, -(i - mid) * 0.06)];
+      const tilt = view.portrait ? 0.5 : 0.95;
+      return [v3((i - mid) * gap, 1.25 - Math.abs(i - mid) * 0.06, 3.35), v3(FACE_UP + tilt, 0, -(i - mid) * 0.06)];
     }
     return [v3((i - mid) * 1.12, 0.012 + i * 0.003, -3.05), v3(FACE_DOWN, 0, (i - mid) * 0.07)];
   },
@@ -136,7 +138,7 @@ let toastTimer = 0;
 function toast(text, kind = '', ms = 1800) {
   const el = $('#toast');
   el.textContent = text;
-  el.className = `toast show ${kind}`;
+  el.className = `toast show ${kind && `is-${kind.replace(/^is-/, '')}`}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.className = 'toast'), ms);
 }
@@ -280,7 +282,7 @@ async function startGame({ seed, firstLeader }) {
     restackDeck();
     check(my);
     updateHud();
-    toast(`Briscola: ${SUIT_LABEL[settings.theme][game.trumpSuit]}`, 'trump');
+    toast(`Briscola: ${SUIT_LABEL[settings.theme][game.trumpSuit]}`, 'is-trump');
     await wait(900, my);
     await loop(my);
   } catch (e) {
@@ -619,7 +621,7 @@ $('#opt-sound').addEventListener('change', (e) => {
 
 window.addEventListener('pointerdown', () => sound.unlock(), { once: true });
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, button, textarea')) return;
+  if (e.target.closest('input[type="text"], textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === 't') setTheme(settings.theme === 'scifi' ? 'classic' : 'scifi');
   else if (k === 'escape') closeMenu();
