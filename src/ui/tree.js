@@ -9,6 +9,7 @@ const TABS = [
   ['operations', 'Operations', 'globe', 'Money, people and public patience.'],
 ];
 const SVGNS = 'http://www.w3.org/2000/svg';
+const LABEL_H = 44; // node name (2 lines) + cost under each hex
 
 export class ResponseTree {
   constructor(root, ui) {
@@ -53,13 +54,13 @@ export class ResponseTree {
     this.autoPause.checked = !!ui.prefs.autoPause;
     this.autoPause.addEventListener('change', () => ui.setPref('autoPause', this.autoPause.checked));
 
-    this.panel = h('div', { class: 'modal tree-modal glass-strong', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ks-tree-title' },
+    this.panel = h('div', { class: 'modal tree-modal glass-strong', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ks-tree-title', tabindex: '-1' },
       h('header', { class: 'modal-head' },
         h('div', { class: 'modal-title' },
           h('span', { class: 'micro', text: 'Global Response' }),
-          h('h2', { id: 'ks-tree-title', text: 'Response protocols' })),
+          h('h2', { id: 'ks-tree-title' }, 'Response', h('span', { class: 'hide-phone', text: ' protocols' }))),
         h('div', { class: 'modal-head-right' },
-          h('label', { class: 'check', for: 'ks-autopause', title: 'Pause the simulation while this screen is open' }, this.autoPause, h('span', { text: 'Pause while open' })),
+          h('label', { class: 'check', for: 'ks-autopause', title: 'Pause the simulation while this screen is open' }, this.autoPause, h('span', { class: 'check-long', text: 'Pause while open' }), h('span', { class: 'check-short', text: 'Pause' })),
           h('div', { class: 'ops-chip' }, h('span', { class: 'ops-ico', html: icon('ops') }), this.opsVal, h('span', { class: 'micro', text: 'Ops' })),
           this.closeBtn)),
       h('nav', { class: 'tabs', role: 'tablist', 'aria-label': 'Response branches' }, this.tabBtns),
@@ -87,7 +88,7 @@ export class ResponseTree {
     this.build();
     requestAnimationFrame(() => {
       this.el.classList.add('is-in');
-      this.tabBtns.find((b) => b.dataset.tab === this.tab)?.focus({ preventScroll: true });
+      this.panel.focus({ preventScroll: true });
     });
   }
 
@@ -156,7 +157,8 @@ export class ResponseTree {
     const avail = this.scroller.clientWidth - 8;
     const cellW = Math.max(66, Math.min(132, avail / cols));
     const hex = Math.round(Math.max(46, Math.min(64, cellW * 0.62)));
-    const cellH = hex + 58;
+    const availH = this.scroller.clientHeight - 30;
+    const cellH = Math.round(Math.max(hex + LABEL_H + 14, Math.min(hex + LABEL_H + 36, availH / rows)));
     const W = Math.max(avail, cellW * cols);
     const H = rows * cellH + 8;
     this.grid.style.width = `${W}px`;
@@ -185,12 +187,13 @@ export class ResponseTree {
         const [x2, y2] = center(u);
         const path = document.createElementNS(SVGNS, 'path');
         const r0 = hex / 2;
+        const below = r0 + LABEL_H; // leave the parent's label + cost clear
         let d;
-        if (Math.abs(x1 - x2) < 1) d = `M${x1},${y1 + r0}V${y2 - r0}`;
-        else if (Math.abs(y1 - y2) < 1) d = `M${x1 + Math.sign(x2 - x1) * r0},${y1}H${x2 - Math.sign(x2 - x1) * r0}`;
+        if (Math.abs(y1 - y2) < 1) d = `M${x1 + Math.sign(x2 - x1) * r0},${y1}H${x2 - Math.sign(x2 - x1) * r0}`;
+        else if (Math.abs(x1 - x2) < 1) d = `M${x1},${y1 + below}V${y2 - r0}`;
         else {
-          const my = y2 - r0 - Math.min(22, (y2 - y1 - 2 * r0) / 2);
-          d = `M${x1},${y1 + r0}V${my}H${x2}V${y2 - r0}`;
+          const my = y2 - r0 - Math.max(8, Math.min(14, (y2 - y1 - r0 - below) / 2));
+          d = `M${x1},${y1 + below}V${my}H${x2}V${y2 - r0}`;
         }
         path.setAttribute('d', d);
         this.svg.append(path);
@@ -282,7 +285,7 @@ export class ResponseTree {
     }, state === 'owned' ? h('span', { html: icon('check') }) : h('span', { class: 'ops-ico', html: icon('ops') }),
       h('span', { text: state === 'owned' ? 'Approved' : `Approve · ${u.cost} Ops` }));
 
-    this.detail.replaceChildren(
+    this.detail.replaceChildren(...[
       h('div', { class: 'detail-head' },
         h('span', { class: `detail-ico st-${state}`, html: icon(u.icon) }),
         h('div', {},
@@ -298,7 +301,7 @@ export class ResponseTree {
           h('dd', { class: 'unlock' }, h('span', { html: icon('bolt') }), this.actionName.get(u.unlocksAction) || u.unlocksAction)) : null),
       state !== 'owned' && state !== 'buyable' && reason ? h('p', { class: 'reason' }, h('span', { html: icon('info') }), reason) : null,
       buy,
-    );
+    ].filter(Boolean));
     this.detail.id = 'ks-tree-detail';
   }
 }

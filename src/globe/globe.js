@@ -447,7 +447,7 @@ export class Globe {
     const t = this.time;
 
     if (game !== this._game) this._onGameChange(game);
-    this._updateState(dt, game);
+    this._guard('state', () => this._updateState(dt, game));
 
     // Camera: focus animation, auto-rotate, menu dolly.
     this._idle += dt;
@@ -485,10 +485,10 @@ export class Globe {
     this.atmoMat.uniforms.uLightDir.value.copy(L);
     this.stars.material.uniforms.uTime.value = t;
 
-    this.arcs.update(dt, t);
-    this.bubbles.update(dt, t, cam, this._h || 800);
-    this.surfaceFx.update(dt);
-    this.labs.update(t, this.reducedMotion);
+    this._guard('arcs', () => this.arcs.update(dt, t));
+    this._guard('bubbles', () => this.bubbles.update(dt, t, cam, this._h || 800));
+    this._guard('surfaceFx', () => this.surfaceFx.update(dt));
+    this._guard('labs', () => this.labs.update(t, this.reducedMotion));
 
     // Keep hover accurate while the globe moves under a stationary mouse.
     if (this._pointer && this._pointer.type !== 'touch' && !this._down) this._updateHover(false);
@@ -550,6 +550,7 @@ export class Globe {
   projectCountry(index) {
     const d = this.dirs[index];
     if (!d) return null;
+    this.camera.updateMatrixWorld();
     const v = d.clone().project(this.camera);
     const visible = d.dot(this.camera.position.clone().normalize()) > 1 / this.camera.position.length();
     return { x: (v.x * 0.5 + 0.5) * this._w, y: (-v.y * 0.5 + 0.5) * this._h, visible };
@@ -559,6 +560,7 @@ export class Globe {
   _pickLonLat(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return null;
+    this.camera.updateMatrixWorld();
     this._ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this._raycaster.setFromCamera(this._ndc, this.camera);
     const hit = this._raycaster.ray.intersectSphere(this._sphere, this._hit);
@@ -621,6 +623,7 @@ export class Globe {
     const tgt = this.tgt, cur = this.cur;
     let threat = 0, popSum = 0, ksAll = false, deploy = 0;
     const countries = game && Array.isArray(game.countries) ? game.countries : null;
+    const flashes = [];
     for (let i = 0; i < n; i++) {
       const o = i * F;
       const c = countries ? countries[i] : null;
@@ -653,13 +656,20 @@ export class Globe {
       const pf = this._prevFlags[i];
       if (pf != null && (flags & ~pf & 15)) {
         cur[o + 7] = 1;
-        const col = flags & 4 ? '#3dff9a' : flags & 8 ? '#3de0ff' : '#ff2d55';
-        this.surfaceFx.ring(this.dirs[i], col, { size: 0.14, life: 1.4, grow: 1 });
+        flashes.push(i, flags);
       }
       this._prevFlags[i] = flags;
       if (c.playable !== false && pop > 0) {
         popSum += pop;
         if (detected) threat += infected + lost;
+      }
+    }
+    // Surface pings for state changes; skipped when many change at once (fast-forward, load).
+    if (flashes.length && flashes.length <= 8) {
+      for (let f = 0; f < flashes.length; f += 2) {
+        const fl = flashes[f + 1];
+        const col = fl & 4 ? '#3dff9a' : fl & 8 ? '#3de0ff' : '#ff2d55';
+        this.surfaceFx.ring(this.dirs[flashes[f]], col, { size: 0.14, life: 1.4, grow: 1 });
       }
     }
     if (game && game.player) {
@@ -688,8 +698,8 @@ export class Globe {
 
     // Atmosphere mood: cyan (humanity) → magenta (AI) → green (kill switch).
     const share = popSum > 0 ? threat / popSum : 0;
-    const want = CYAN.clone().lerp(MAGENTA, THREE.MathUtils.smoothstep(share, 0.03, 0.6) * 0.85);
-    if (ksAll) want.lerp(GREEN, Math.min(1, 0.4 + deploy * 0.6));
+    const want = CYAN.clone().lerpHSL(MAGENTA, THREE.MathUtils.smoothstep(share, 0.03, 0.6) * 0.9);
+    if (ksAll) want.lerpHSL(GREEN, Math.min(1, 0.4 + deploy * 0.6));
     this.atmoMat.uniforms.uColor.value.lerp(want, Math.min(1, dt * 1.5));
     this.earthMat.uniforms.uAtmo.value.copy(this.atmoMat.uniforms.uColor.value);
 
@@ -699,6 +709,16 @@ export class Globe {
         const it = this.bubbles.items.get(id);
         if (it.age > 1.5 && !game.bubbles.has(id)) this.bubbles.remove(id, false);
       }
+    }
+  }
+
+  /** Run an effect subsystem; a bug there is logged once instead of breaking the frame. */
+  _guard(name, fn) {
+    try {
+      fn();
+    } catch (err) {
+      this._errs = this._errs || new Set();
+      if (!this._errs.has(name)) { this._errs.add(name); console.error(`[globe] ${name} update failed`, err); }
     }
   }
 

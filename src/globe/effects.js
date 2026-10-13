@@ -70,9 +70,10 @@ function makeFlareTexture() {
 // Ground rings (impact / pulse markers lying on the surface)
 // ---------------------------------------------------------------------------
 export class SurfaceFx {
-  constructor(parent) {
+  constructor(parent, { max = 60 } = {}) {
     this.group = new THREE.Group();
     parent.add(this.group);
+    this.max = max;
     this.ringTex = makeRingTexture();
     this.flareTex = makeFlareTexture();
     this.geo = new THREE.PlaneGeometry(1, 1);
@@ -89,6 +90,14 @@ export class SurfaceFx {
     m.renderOrder = 3;
     this.group.add(m);
     this.items.push({ m, age: 0, life, size, grow });
+    this._cap();
+  }
+  _cap() {
+    while (this.items.length > this.max) {
+      const it = this.items.shift();
+      this.group.remove(it.m);
+      it.m.material.dispose();
+    }
   }
   flare(pos, color, { size = 0.06, life = 0.6 } = {}) {
     const mat = new THREE.SpriteMaterial({
@@ -100,6 +109,7 @@ export class SurfaceFx {
     s.renderOrder = 4;
     this.group.add(s);
     this.items.push({ m: s, age: 0, life, size, grow: 0.6, flare: true });
+    this._cap();
   }
   update(dt) {
     for (let k = this.items.length - 1; k >= 0; k--) {
@@ -168,7 +178,6 @@ export class Arcs {
     const travel = (0.55 + curve.ang * 0.5) / cfg.speed;
     const item = { mesh, mat, geom, age: 0, travel, hold: 2.2, fadeOut: 1.0, to: b.clone(), from: a.clone(), color: cfg.color, landed: false };
     this.items.push(item);
-    this.fx.ring(a, cfg.color, { size: 0.05, life: 0.8, grow: 0.8 });
     while (this.items.length > this.max) this._remove(0);
   }
   _remove(k) {
@@ -188,8 +197,8 @@ export class Arcs {
       u.uTime.value = time;
       if (!it.landed && head >= 1) {
         it.landed = true;
-        this.fx.ring(it.to, it.color, { size: 0.09, life: 1.1, grow: 1 });
-        this.fx.flare(it.to.clone().normalize().multiplyScalar(1.01), it.color, { size: 0.07, life: 0.5 });
+        this.fx.ring(it.to, it.color, { size: 0.06, life: 0.9, grow: 1 });
+        this.fx.flare(it.to.clone().normalize().multiplyScalar(1.01), it.color, { size: 0.05, life: 0.45 });
       }
       const end = it.travel + it.hold;
       u.uFade.value = it.age < end ? 1 : Math.max(0, 1 - (it.age - end) / it.fadeOut);
@@ -334,7 +343,7 @@ export class Bubbles {
       v.push(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(scale * (1.2 + Math.random() * 1.6)));
     }
     geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    const mat = new THREE.PointsMaterial({ color: new THREE.Color(color).multiplyScalar(1.5), size: 3.5, sizeAttenuation: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const mat = new THREE.PointsMaterial({ map: this.fx.flareTex, color: new THREE.Color(color).multiplyScalar(1.5), size: 7, sizeAttenuation: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
     const pts = new THREE.Points(geo, mat);
     pts.renderOrder = 11;
     this.group.add(pts);
@@ -343,7 +352,7 @@ export class Bubbles {
   update(dt, time, camera, viewH, pxRatioUnused) {
     const camPos = camera.position;
     const fovK = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.max(1, viewH);
-    const targetPx = this.touch ? 50 : 42;
+    const targetPx = this.touch ? 58 : 50;
     const v = this._v;
     for (const it of this.items.values()) {
       it.age += dt;
@@ -382,12 +391,10 @@ export class Bubbles {
         this.dying.splice(k, 1);
         continue;
       }
-      const sc = it.collected ? 1 + p * 0.6 : 1 - p;
-      it.sprite.scale.multiplyScalar(it.collected ? 1 : 1).setScalar(it.sprite.scale.x * (it.collected ? 1 + dt * 2.4 : 1 - dt * 2.5));
-      it.sprite.scale.z = 1;
+      const grow = it.collected ? 1 + dt * 2.4 : Math.max(0, 1 - dt * 2.5);
+      it.sprite.scale.set(it.sprite.scale.x * grow, it.sprite.scale.y * grow, 1);
       it.sprite.material.opacity = (1 - p) * (it.screen.visible ? 1 : 0);
       it.tether.material.opacity = (1 - p) * 0.5;
-      void sc;
     }
     for (let k = this.particles.length - 1; k >= 0; k--) {
       const pa = this.particles[k];
@@ -413,7 +420,7 @@ export class Bubbles {
   pick(x, y, camera, rect) {
     let best = null, bestD = Infinity;
     const v = this._v;
-    const minR = this.touch ? 34 : 26;
+    const minR = this.touch ? 36 : 28;
     for (const it of this.items.values()) {
       if (!it.screen.visible || it.age < 0.15) continue;
       v.copy(it.sprite.position).project(camera);

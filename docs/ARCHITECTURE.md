@@ -125,6 +125,7 @@ game.canDoAction(countryIndex, actionId) -> { ok, reason? }
 game.doAction(countryIndex, actionId)    -> boolean   // toggles for toggle actions
 game.actionState(countryIndex, actionId) -> 'available'|'active'|'locked'|'unaffordable'
 game.collectBubble(bubbleId)      -> { kind, value } | null
+game.actionCost(countryIndex, actionId) -> number   // current cost (e.g. Fund Lab scales with level); UI prefers this over defs.actions[].cost
 ```
 
 ### Events (`game.on(type, fn(payload))`)

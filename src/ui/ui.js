@@ -285,7 +285,8 @@ export class UI {
     }
     if (typing || this.mode !== 'playing' || !this.game || this.game.status !== 'playing') return;
     if (e.key === ' ' || e.code === 'Space') {
-      if (/^(BUTTON|SUMMARY|A)$/.test(tag)) return; // let Space activate the focused control
+      // Let Space activate a focused control, except the speed buttons (Space = pause there too).
+      if (/^(BUTTON|SUMMARY|A)$/.test(tag) && !e.target.closest('.speed')) return;
       e.preventDefault();
       this.togglePause();
     } else if (e.key === '1' || e.key === '2' || e.key === '3') {

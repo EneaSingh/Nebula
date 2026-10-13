@@ -42,14 +42,15 @@ export class CountryPanel {
     $.metrics = h('div', { class: 'metrics' },
       $.digital.el, $.trust.el,
       h('div', { class: 'metric m-lab' }, h('span', { class: 'micro', text: 'Research lab' }), $.labVal, h('span', { class: 'pips' }, $.labPips)),
-      h('div', { class: 'metric m-res' }, h('span', { class: 'micro', text: 'Research / day' }), $.resVal));
+      h('div', { class: 'metric m-res' }, h('span', { class: 'micro', text: 'Research' }), $.resVal));
     $.measures = h('div', { class: 'measures' });
     $.actions = h('div', { class: 'actions' });
     $.body = h('div', { class: 'cp-body' },
       h('div', { class: 'cp-pop' }, h('span', { class: 'micro', text: 'Population' }), $.pop),
-      $.unknown, $.split, $.metrics,
+      $.unknown, $.split,
+      h('h3', { class: 'micro section-label', text: 'Actions' }), $.actions,
       h('h3', { class: 'micro section-label', text: 'Active measures' }), $.measures,
-      h('h3', { class: 'micro section-label', text: 'Actions' }), $.actions);
+      h('h3', { class: 'micro section-label', text: 'Country profile' }), $.metrics);
     $.empty = h('p', { class: 'cp-empty', text: 'Uninhabited. The penguins are holding firm.' });
 
     this.el = h('section', { class: 'panel country-panel glass-strong sheet', hidden: true, 'aria-labelledby': 'ks-cp-name', role: 'region' },
@@ -151,7 +152,7 @@ export class CountryPanel {
     setText($.labVal, lab ? `Level ${lab}` : 'None');
     $.labPips.forEach((p, i) => toggleClass(p, 'on', i < lab));
     const r = (c.research || 0) * 100;
-    setText($.resVal, r > 0 ? `+${r < 0.01 ? r.toFixed(4) : r.toFixed(3)}%` : '0');
+    setText($.resVal, r > 0 ? `+${r < 0.01 ? r.toFixed(4) : r.toFixed(3)}%/d` : '0');
 
     // measures (chips)
     const m = [];
@@ -174,12 +175,14 @@ export class CountryPanel {
       if (btn.dataset.state !== st) btn.dataset.state = st;
       const enabled = !!can.ok;
       if (btn.disabled === enabled) btn.disabled = !enabled;
-      setText(state, st === 'active' ? 'Active' : a.toggle ? 'Toggle' : '');
+      setText(state, st === 'active' ? (a.toggle ? 'Active' : 'Done') : a.toggle ? 'Toggle' : '');
       toggleClass(state, 'is-active', st === 'active');
       const parts = [];
       if (st === 'active' && a.toggle) parts.push('Lift');
       else {
-        if (a.cost) parts.push(`${a.cost} ops`);
+        // actionCost() is an optional sim extension (level-scaled Fund Lab); fall back to the contract's `cost`.
+        const cost = typeof game.actionCost === 'function' ? game.actionCost(this.index, a.id) ?? a.cost : a.cost;
+        if (cost) parts.push(`${cost} ops`);
         if (a.trustCost) parts.push(`−${Math.round(a.trustCost * 100)}% trust`);
         if (!parts.length) parts.push('Free');
       }

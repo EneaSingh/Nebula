@@ -127,7 +127,42 @@ export class Hud {
     this.idleSince = 0;
   }
 
-  show() { this.el.hidden = false; this.startTicker(); }
+  show() {
+    this.el.hidden = false;
+    this.startTicker();
+    this.measure();
+    if (!this.ro && typeof ResizeObserver !== 'undefined') {
+      this.ro = new ResizeObserver(() => this.measure());
+      this.ro.observe(this.$.top);
+      this.ro.observe(this.$.ticker);
+      this.ro.observe(this.$.bottom);
+    }
+    if (!this.onResize) {
+      this.onResize = () => this.measure();
+      window.addEventListener('resize', this.onResize);
+    }
+  }
+
+  /** Publish the real HUD extents so panels/toasts never overlap the bars. */
+  measure() {
+    if (this.el.hidden) return;
+    const root = this.ui.root;
+    const tk = this.$.ticker.getBoundingClientRect();
+    const bb = this.$.bottom.getBoundingClientRect();
+    const rootR = root.getBoundingClientRect();
+    if (!tk.height || !bb.height) return;
+    const vars = {
+      '--panel-top': tk.bottom - rootR.top + 10,
+      '--bb-reserve': rootR.bottom - bb.top + 10,
+      // left column sits above the threat card; right column above vitals/buttons
+      '--bb-reserve-l': rootR.bottom - this.$.threat.getBoundingClientRect().top + 10,
+      '--bb-reserve-r': rootR.bottom - Math.min(this.$.vitals.getBoundingClientRect().top, this.$.actions.getBoundingClientRect().top) + 10,
+    };
+    for (const [k, v] of Object.entries(vars)) {
+      const px = `${Math.round(v)}px`;
+      if (root.style.getPropertyValue(k) !== px) root.style.setProperty(k, px);
+    }
+  }
   hide() { this.el.hidden = true; this.running = false; }
 
   reset() {
@@ -227,13 +262,14 @@ export class Hud {
     return h('span', { class: `tick-item sev-${n.severity || 'info'}` },
       h('i', { class: 'tick-mark' }),
       n.day != null ? h('span', { class: 'tick-day num', text: `D${pad3(n.day)}` }) : null,
-      h('span', { text: n.text }));
+      h('span', { class: 'tick-text', text: n.text }));
   }
 
   showStatic() {
     const n = this.queue.shift();
     if (!n) return;
     this.$.track.replaceChildren(this.makeItem(n));
+    this.$.track.classList.add('is-static');
     this.$.track.style.transform = 'none';
   }
 
@@ -241,8 +277,9 @@ export class Hud {
     if (this.running) return;
     this.running = true;
     this.lastT = performance.now();
+    const gen = (this.gen = (this.gen || 0) + 1);
     const step = (t) => {
-      if (!this.running) return;
+      if (!this.running || gen !== this.gen) return;
       const dt = Math.min(0.1, (t - this.lastT) / 1000);
       this.lastT = t;
       if (!reducedMotion()) this.tickMarquee(dt);

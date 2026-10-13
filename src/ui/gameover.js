@@ -62,7 +62,9 @@ export class GameOver {
     for (const [k, label, f] of KNOWN_STATS) if (Number.isFinite(stats[k])) rows.push([label, f(stats[k])]);
     for (const [k, v] of Object.entries(stats)) {
       if (KNOWN_STATS.some((s) => s[0] === k) || !Number.isFinite(v) || rows.length >= 8) continue;
-      rows.push([camelToWords(k), v > 1e4 ? fmtNum(v) : String(Math.round(v * 100) / 100)]);
+      const isPct = /pct|percent|share|ratio|frac/i.test(k) && Math.abs(v) <= 1;
+      const label = camelToWords(k.replace(/Pct$|Percent$/, '')) + (isPct ? ' %' : '');
+      rows.push([label, isPct ? fmtPct(v, v < 0.1 ? 1 : 0) : Math.abs(v) >= 1e4 ? fmtNum(v) : Math.abs(v) >= 10 ? Math.round(v).toLocaleString('en-US') : String(Math.round(v * 100) / 100)]);
     }
     this.stats.replaceChildren(...rows.map(([l, v]) => h('div', { class: 'go-stat' }, h('dt', { class: 'micro', text: l }), h('dd', { class: 'num', text: v }))));
 
@@ -99,8 +101,8 @@ export class GameOver {
     const H = this.canvas.clientHeight;
     const padL = 46;
     const padR = 14;
-    const gap = 22;
-    const popTop = 10;
+    const gap = 36;
+    const popTop = 24;
     const resH = Math.max(46, Math.round(H * 0.24));
     const popH = H - popTop - gap - resH - 22;
     const resTop = popTop + popH + gap;
@@ -165,8 +167,8 @@ export class GameOver {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = C.text;
-    ctx.fillText('POPULATION', g.padL + 4, g.popTop + 10);
-    ctx.fillText('KILL SWITCH RESEARCH', g.padL + 4, g.resTop - 6);
+    ctx.fillText('POPULATION', g.padL, g.popTop - 12);
+    ctx.fillText('KILL SWITCH RESEARCH', g.padL, g.resTop - 12);
 
     // x axis ticks (days)
     const step = niceStep((d1 - d0) / Math.max(2, Math.floor(g.plotW / 80)));

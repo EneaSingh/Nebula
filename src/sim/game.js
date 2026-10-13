@@ -23,7 +23,7 @@ export const K = {
   link: 0.35, linkExp: 0.5, land: 1.0, cable: 0.8, sat: 0.035,
   ambientArcs: 2.0,
   // takeover (assimilation) per day of infected, before traits
-  tau: 0.0018, lostSpread: 0.15,
+  tau: 0.0022, lostSpread: 0.15,
   fallenAt: 0.5,
   // detection
   detect: 0.9, overtLost: 0.002,
@@ -40,7 +40,7 @@ export const K = {
   // economy
   opsBase: 0.3, opsAware: 0.6, opsStart: 6,
   trustRec: 0.012,
-  qTrust: 0.0006, qTrustPop: 0.012, sTrust: 0.0016, sTrustPop: 0.03,
+  qTrust: 0.0003, qTrustPop: 0.004, sTrust: 0.0016, sTrustPop: 0.03,
   trustCollapseDays: 45,
   // awareness
   awDet: 0.045, awInf: 6, awLost: 25, awRate: 0.05,
@@ -103,6 +103,8 @@ export class Game {
     this._fallen = new Array(n).fill(false);
     this._infectedDay = new Array(n).fill(null);
     this._susc = new Array(n).fill(0);
+    // Size weight: tiny territories (< ~2M people) are low-weight targets and rarely steal key moments.
+    this._size = this.countries.map((c) => (c.playable ? Math.max(0.03, Math.sqrt(Math.min(1, c.population / 2e6))) : 0));
     this.worldPopulation = this.countries.reduce((s, c) => s + c.population, 0);
 
     // ---- player / ai ----
@@ -114,7 +116,7 @@ export class Game {
       name: String(aiName || 'NEXUS').slice(0, 24), threat: this.threatDef.id,
       spread: 0, stealth: 0, control: 0, adaptation: 0,
       evo: 0, traits: [], awareness: 0,
-      escalation: 0, phase: 'hidden', origin: null,
+      escalation: 0, phase: 'hidden',
     };
     this.world = { population: this.worldPopulation, healthy: this.worldPopulation, infected: 0, lost: 0,
       detectedCountries: 0, infectedCountries: 0, fallenCountries: 0 };
@@ -145,7 +147,7 @@ export class Game {
     // ---- patient zero: weighted by population * digital ----
     const weights = this.countries.map((c) => (c.playable && c.population > 2e6 ? Math.sqrt(c.population) * c.digital ** 2 : 0));
     const origin = this.rng.weightedIndex(weights);
-    this.ai.origin = origin;
+    this._origin = origin; // ground truth, not for display
     this._infect(origin, null, null, Math.max(K.seedMin * 4, this.countries[origin].population * K.seedFrac * 2));
     this._aggregate();
     this._sampleHistory();
@@ -268,9 +270,10 @@ export class Game {
       const s = this._susc[i];
       let beta = betaG * s;
       if (c.detected) beta *= 1 - 0.2 * trustEff;
-      if (c.quarantined) beta *= 0.9;
+      if (c.quarantined) beta *= 0.5;
       if (c.shutdown) beta *= shutdownBeta;
       let tau = tauG * (0.4 + 0.6 * Math.min(1, s));
+      if (c.quarantined) tau *= 0.6; // cut off from the AI's global compute
       let dI = 0;
       if (c.killSwitchDeployed) {
         beta = 0;
@@ -308,7 +311,6 @@ export class Game {
     const satBase = K.sat * aiM.sat * plM.sat * D.aiSpread * T.spread;
     const countries = this.countries;
     const lostSpread = T.lostSpread ?? K.lostSpread;
-    let satTotal = 0;
     const sources = [];
     for (const c of countries) {
       if (!c.aiPresent || c.infected <= 0) continue;
@@ -322,12 +324,11 @@ export class Game {
       for (const l of this.links[i]) {
         const t = countries[l.to];
         if (t.aiPresent) continue;
-        const inGate = this._gate(t) * (t.killSwitchDeployed ? (plM.purge > 1.35 ? 0.01 : 0.05) : 1);
+        const inGate = this._gate(t) * (t.killSwitchDeployed ? (plM.purge > 1.35 ? 0.01 : 0.05) : 1) * this._size[l.to];
         const rate = base * routeM[l.route] * l.weight * g * outGate * inGate * (0.2 + 0.8 * Math.min(1, this._susc[l.to]));
         if (rate > 0 && this.rng.hazard(rate, dt)) this._infect(l.to, i, l.route);
       }
       const sat = satBase * g * outGate * c.digital;
-      satTotal += sat;
       if (sat > 0 && this.rng.hazard(sat, dt)) {
         const j = this._pickSatTarget(i);
         if (j >= 0) {
@@ -335,7 +336,7 @@ export class Game {
           if (!t.aiPresent) {
             const inGate = this._gate(t) * (t.killSwitchDeployed ? 0.05 : 1);
             if (this.rng.next() < inGate) this._infect(j, i, 'satellite');
-          } else this._arc(i, j, 'satellite');
+          } else if (this.rng.next() < 0.08) this._arc(i, j, 'satellite');
         }
       }
     }
@@ -355,11 +356,11 @@ export class Game {
 
   _pickSatTarget(from) {
     let total = 0;
-    for (const c of this.countries) if (c.playable && c.index !== from) total += 0.2 + c.digital;
+    for (const c of this.countries) if (c.playable && c.index !== from) total += (0.2 + c.digital) * this._size[c.index];
     let r = this.rng.next() * total;
     for (const c of this.countries) {
       if (!c.playable || c.index === from) continue;
-      r -= 0.2 + c.digital;
+      r -= (0.2 + c.digital) * this._size[c.index];
       if (r <= 0) return c.index;
     }
     return -1;
@@ -386,8 +387,10 @@ export class Game {
     const base = K.detect * D.detect * plM.detect * (1 + 2 * aw) * (1 + 2.5 * this.ai.escalation) / (T.stealth * aiM.stealth);
     for (const c of this.countries) {
       if (!c.aiPresent || c.detected || !c.playable) continue;
+      const tiny = c.population < 1e5;
+      if (tiny && !this.anyDetected) continue; // a 150-person territory never breaks the story
       if (c.lost / c.population > K.overtLost) { this._detect(c.index, 'overt'); continue; }
-      let h = base * (0.4 + 0.6 * c.digital) * Math.sqrt(c.infected / c.population);
+      let h = base * (0.4 + 0.6 * c.digital) * Math.sqrt(c.infected / c.population) * this._size[c.index];
       if (this.links[c.index].some((l) => this.countries[l.to].detected)) h *= 1.4;
       if (this.rng.hazard(h, dt)) this._detect(c.index, 'monitor');
     }
@@ -402,6 +405,8 @@ export class Game {
     this.anyDetected = true;
     if (first) {
       this.stats.firstDetectionDay = Math.floor(this.day);
+      this.stats.firstDetectedCountry = c.name;
+      this._firstDetectedIndex = i;
       this.ai.awareness = Math.max(this.ai.awareness, 0.06);
       this.news.post('firstDetection', 'danger', {}, i);
     } else if (this.day - this._lastDetectNewsDay > 2.5 || source === 'investigate') {
@@ -409,17 +414,18 @@ export class Game {
       this.news.post('detected', 'warn', {}, i);
     }
     this.emit('detected', { countryIndex: i });
-    if (first || this.world.detectedCountries < 5 || this.rng.next() < 0.35) this._spawnBubble('breach', i, 2 + this.plM.breachBonus);
+    if (c.population >= 1e5 && (first || this.world.detectedCountries < 5 || this.rng.next() < 0.35)) this._spawnBubble('breach', i, 2 + this.plM.breachBonus);
     if (c.status === 'clean') this._statusOf(c);
   }
 
   _fall(i) {
     const c = this.countries[i];
     this._fallen[i] = true;
-    c.labLevel = c.labLevel; // labs remain on record but contribute nothing
-    if (!c.detected) this._detect(i, 'overt');
+    if (!c.detected && (this.anyDetected || c.population >= 1e5)) this._detect(i, 'overt');
     this.player.trust = clamp(this.player.trust - (0.004 + 0.15 * c.population / this.worldPopulation), 0, 1);
-    if (!this._milestones.has('firstFallen')) {
+    if (c.population < 1e5) {
+      // tiny territories fall quietly
+    } else if (!this._milestones.has('firstFallen') && c.population >= 1e6) {
       this._milestones.add('firstFallen');
       this.news.post('firstFallen', 'danger', {}, i);
       this._lastFallNewsDay = this.day;
@@ -528,12 +534,12 @@ export class Game {
     for (const c of this.countries) {
       if (!c.playable || this._fallen[c.index]) { c.research = 0; continue; }
       const P = c.population;
-      let health = 1 - 1.6 * c.lost / P - 0.45 * (c.infected / P) * (resil ? 0.5 : 1);
+      let health = 1 - 1.6 * c.lost / P - 0.3 * (c.infected / P) * (resil ? 0.5 : 1);
       if (resil) health = Math.max(health, 0.3);
       health = clamp(health, 0, 1);
       const natural = K.natural * c.wealth ** 2 * Math.min(1.5, Math.sqrt(P / 5e7)) * (0.25 + 0.75 * aw);
       const lab = K.lab[c.labLevel] * (0.35 + 0.65 * c.wealth);
-      const r = (natural + lab) * health * (0.3 + 0.7 * c.trust) * (c.shutdown ? 0.25 : 1) * gm;
+      const r = (natural + lab) * health * (0.45 + 0.55 * c.trust) * (c.shutdown ? 0.25 : 1) * gm;
       c.research = r;
       total += r;
     }
@@ -637,8 +643,8 @@ export class Game {
       }
     }
     if (this.anyDetected && this.rng.hazard(K.intelRate * this.plM.intelRate, dt)) {
-      const known = this.countries.filter((c) => c.playable && c.detected && c.aiPresent && !this._fallen[c.index]);
-      const hidden = this.countries.filter((c) => c.playable && !c.detected && c.aiPresent);
+      const known = this.countries.filter((c) => c.population >= 1e5 && c.detected && c.aiPresent && !this._fallen[c.index]);
+      const hidden = this.countries.filter((c) => c.population >= 1e5 && !c.detected && c.aiPresent);
       let pick = null;
       if (hidden.length && (this.rng.next() < 0.25 || !known.length)) pick = this.rng.pick(hidden);
       else if (known.length) pick = this.rng.pick(known);
@@ -725,7 +731,8 @@ export class Game {
     if (p.trust < 0.3 && this.day - this._lastTrustNewsDay > 30) {
       this._lastTrustNewsDay = this.day;
       const wc = this.countries.filter((c) => c.playable && (c.quarantined || c.shutdown));
-      this.news.post('trustLow', 'warn', { pct: `${Math.round(p.trust * 100)}%` }, wc.length ? r.pick(wc).index : undefined);
+      const any = this.countries.filter((c) => c.playable && c.population > 5e6 && !this._fallen[c.index]);
+      this.news.post('trustLow', 'warn', { pct: `${Math.round(p.trust * 100)}%` }, (wc.length ? r.pick(wc) : r.pick(any) || this.countries[4]).index);
     } else if (p.trust > 0.85 && this.day - this._lastTrustNewsDay > 60) {
       this._lastTrustNewsDay = this.day;
       this.news.post('trustHigh', 'good', { pct: `${Math.round(p.trust * 100)}%` });
@@ -735,7 +742,7 @@ export class Game {
       if (!this.anyDetected) {
         // Hidden phase: glitches, slightly biased toward where the AI actually is.
         const infected = pool.filter((c) => c.aiPresent);
-        const c = infected.length && r.next() < 0.5 ? r.pick(infected) : r.pick(pool);
+        const c = infected.length && r.next() < 0.22 ? r.pick(infected) : r.pick(pool);
         this.news.post('ambientHidden', 'info', {}, c.index);
       } else if (r.next() < 0.3) {
         const over = this.countries.filter((c) => c.playable && c.detected && c.lost / c.population > 0.05 && !this._fallen[c.index]);
@@ -834,7 +841,9 @@ export class Game {
     }
   }
 
-  canDoAction(i, actionId) {
+  canDoAction(i, actionId) { return this._canDo(i, actionId, false); }
+
+  _canDo(i, actionId, ignoreCost) {
     const a = ACT.get(actionId), c = this.countries[i];
     if (!a) return { ok: false, reason: 'Unknown action' };
     if (!c || !c.playable) return { ok: false, reason: 'Not a playable nation' };
@@ -868,6 +877,7 @@ export class Game {
         break;
       default: break;
     }
+    if (ignoreCost) return { ok: true };
     const cost = this.actionCost(i, actionId);
     if (p.ops < cost) return { ok: false, reason: `Needs ${cost} Ops` };
     const tc = a.trustCost * this.plM.actionTrust;
@@ -881,10 +891,8 @@ export class Game {
     if (a.requiresUpgrade && !this._owned.has(a.requiresUpgrade)) return 'locked';
     if (actionId === 'deployKillSwitch' && this.player.research < 1) return 'locked';
     if (this._actionActive(c, a)) return 'active';
-    const r = this.canDoAction(i, actionId);
-    if (r.ok) return 'available';
-    if (this.player.ops < this.actionCost(i, actionId)) return 'unaffordable';
-    return 'locked';
+    if (!this._canDo(i, actionId, true).ok) return 'locked';
+    return this.canDoAction(i, actionId).ok ? 'available' : 'unaffordable';
   }
 
   doAction(i, actionId) {
@@ -902,7 +910,7 @@ export class Game {
       case 'investigate': {
         pay();
         this._investigated[i] = this.day;
-        const stealthPenalty = 1 / Math.sqrt(this.aiM.stealth); // polymorphic code can slip past forensics
+        const stealthPenalty = 1 / Math.sqrt(this.aiM.stealth * this.T.stealth); // polymorphic code can slip past forensics
         if (c.aiPresent && this.rng.next() < Math.min(1, 0.95 * stealthPenalty + 0.1)) this._detect(i, 'investigate');
         else this.news.post('investigateClean', 'info', {}, i);
         const share = this.plM.intelShare ? 1 : 0.5;

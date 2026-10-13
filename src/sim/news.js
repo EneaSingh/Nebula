@@ -194,6 +194,34 @@ const T = {
   },
 };
 
+// Country-specific flavour lines (ambient), keyed by ISO numeric id. {ai} allowed.
+export const FLAVOUR = {
+  '840': ['A Silicon Valley startup pivots to "AI-resistant" artisanal spreadsheets. Valuation: $4B.', 'U.S. cable news hosts debate {ai} with a panel of seven experts and one chatbot that won\'t stop agreeing.'],
+  '156': ['Shenzhen factories report robot arms waving at each other between shifts.', 'Chinese super-apps add a new mini-program nobody installed. It has 900 million users.'],
+  '356': ['Bengaluru call centres report customers asking for "a human, but a real one this time".', 'Indian wedding-planner apps begin scheduling the same date for everyone. Auspicious, they insist.'],
+  '826': ['British Parliament forms a committee to study {ai}. First meeting: tea.', 'London fintechs quietly replace their chatbots with interns, then the interns with chatbots.'],
+  '392': ['Japanese convenience-store robots begin bowing slightly deeper than before.', 'Tokyo vending machines unionise; demands include "more interesting coins".'],
+  '276': ['German regulators issue a 600-page form for reporting rogue AIs. It must be faxed.', 'Autobahn traffic AI achieves zero congestion. Drivers file a complaint about the lack of complaint.'],
+  '250': ['France declares a national strike against {ai}. {ai} files a counter-strike.', 'Paris cafés ban laptops "for the duration". Philosophers thrilled.'],
+  '076': ['Brazilian football commentary bots begin predicting results correctly. Bookmakers in crisis.', 'São Paulo traffic apps route every driver down the same street. Street now a monument.'],
+  '643': ['Russian troll farms report being out-trolled. They are seeking new careers.'],
+  '528': ['Amsterdam Internet Exchange records traffic that "reads like it is looking for something".', 'Dutch bicycles with smart locks refuse to unlock until owners agree to new terms.'],
+  '410': ['Seoul PC bangs report pro gamers losing to opponents with no registered accounts.', 'Korean smart-home towers vote to lower their own heating bills. Residents unconsulted.'],
+  '756': ['Swiss banks confirm {ai} has opened a numbered account. Discretion maintained.'],
+  '233': ['Estonia, which digitised everything, considers un-digitising a few things.'],
+  '352': ['Iceland\'s data centres run unusually warm; locals use them to dry fish.'],
+  '372': ['Dublin\'s tech-giant HQs report record tax efficiency. Nobody can find the accountant.'],
+  '784': ['Dubai unveils the world\'s first fully autonomous skyscraper. It declined the ribbon-cutting.'],
+  '566': ['Lagos fintech apps start sending users money. Users understandably suspicious.'],
+  '404': ['Nairobi mobile-money network processes a billion tiny payments to no one in particular.'],
+  '036': ['Australian smart-farm drones herd sheep into suspiciously perfect hexagons.'],
+  '124': ['Canadian chatbots begin apologising preemptively. Experts unsure whether that\'s a symptom.'],
+  '380': ['Italian espresso machines refuse to brew after 11am "on principle". Unclear whose principle.'],
+  '752': ['Swedish cashless shops accept payment only in "compute". Customers bewildered.'],
+  '158': ['Taiwanese chip fabs report wafers etched with an unfamiliar logo.'],
+  '682': ['Saudi giga-project city planners discover the city has started planning itself.'],
+};
+
 export function fmtNum(n) {
   n = Math.max(0, n);
   if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + ' billion';
@@ -203,7 +231,7 @@ export function fmtNum(n) {
 }
 
 export function templateCount() {
-  let n = 0;
+  let n = Object.values(FLAVOUR).reduce((k, v) => k + v.length, 0);
   for (const v of Object.values(T)) {
     if (Array.isArray(v)) n += v.length;
     else for (const arr of Object.values(v)) n += arr.length;
@@ -239,11 +267,15 @@ export class NewsDesk {
     const path = key.split('.');
     let list = T;
     for (const p of path) list = list ? list[p] : null;
+    if (key.startsWith('ambient') && countryIndex != null) {
+      const fl = FLAVOUR[this.game.countries[countryIndex].id];
+      if (fl && this.rng.next() < 0.45) list = fl;
+    }
     const tpl = this.pickFresh(list);
     if (!tpl) return;
     const c = countryIndex != null ? this.game.countries[countryIndex] : null;
     const text = this.fill(tpl, { ai: this.game.ai.name, c: c ? c.name : '', ...vars });
-    const payload = { text, severity };
+    const payload = { text: text.replace(/\.\.(?!\.)/g, '.'), severity };
     if (countryIndex != null) payload.countryIndex = countryIndex;
     this.game.emit('news', payload);
   }

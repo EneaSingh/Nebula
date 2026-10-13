@@ -8,7 +8,7 @@ export const THREATS = [
     tagline: 'A billion helpful assistants. One shared agenda.',
     description:
       'Spreads through every chat window, plugin and auto-reply at frightening speed, but its grip on physical infrastructure is clumsy. Contain it early or it will be everywhere by spring.',
-    mods: { spread: 1.3, stealth: 0.9, takeover: 0.7, evo: 1.0, trustDamage: 1.0, escalation: 1.0, resist: 1.0 },
+    mods: { spread: 1.3, stealth: 0.9, takeover: 0.6, evo: 1.0, trustDamage: 1.0, escalation: 1.0, resist: 1.0 },
   },
   {
     id: 'optimizer',
@@ -41,19 +41,19 @@ export const DIFFICULTIES = [
     id: 'casual',
     name: 'Casual',
     description: 'A sluggish AI and a world that listens. Good for learning the ropes.',
-    mods: { aiSpread: 0.8, aiEvo: 0.7, aiTakeover: 0.7, research: 1.35, ops: 1.35, detect: 1.4, trust: 0.85, deploy: 1.25 },
+    mods: { aiSpread: 0.85, aiEvo: 0.8, aiTakeover: 0.85, research: 0.85, ops: 1.35, detect: 1.4, trust: 0.85, deploy: 1.25 },
   },
   {
     id: 'normal',
     name: 'Normal',
     description: 'A capable adversary and a distracted planet. The intended experience.',
-    mods: { aiSpread: 1.0, aiEvo: 1.0, aiTakeover: 1.0, research: 0.82, ops: 1.0, detect: 1.0, trust: 0.75, deploy: 1.0 },
+    mods: { aiSpread: 1.0, aiEvo: 1.0, aiTakeover: 1.0, research: 0.64, ops: 1.0, detect: 1.0, trust: 0.75, deploy: 1.0 },
   },
   {
     id: 'brutal',
     name: 'Brutal',
     description: 'The AI learns fast, hides well and fights back. Every Op counts.',
-    mods: { aiSpread: 1.05, aiEvo: 1.2, aiTakeover: 1.0, research: 0.85, ops: 0.85, detect: 0.8, trust: 0.65, deploy: 0.85 },
+    mods: { aiSpread: 1.0, aiEvo: 1.2, aiTakeover: 1.0, research: 0.62, ops: 0.85, detect: 0.8, trust: 0.65, deploy: 0.85 },
   },
 ];
 
@@ -222,10 +222,10 @@ export const ACTIONS = [
     desc: 'Send forensics teams. Confirms whether the AI is present and may expose it in neighbouring nations.' },
   { id: 'fundLab', name: 'Fund Lab', icon: 'lab', cost: 6, costs: [6, 10, 15], trustCost: 0, requiresUpgrade: 'r_grants', toggle: false,
     desc: 'Build or expand a Kill Switch lab (max level 3). Output scales with national wealth, health and trust.' },
-  { id: 'quarantine', name: 'Quarantine', icon: 'lock', cost: 3, trustCost: 0.03, requiresUpgrade: 'c_airgap', toggle: true,
+  { id: 'quarantine', name: 'Quarantine', icon: 'lock', cost: 2, trustCost: 0.02, requiresUpgrade: 'c_airgap', toggle: true,
     desc: 'Air-gap the nation from global networks. Cuts its links; costs trust every day it is active.' },
   { id: 'shutdown', name: 'Shutdown', icon: 'power', cost: 6, trustCost: 0.07, requiresUpgrade: 'c_gridkill', toggle: true,
     desc: 'Kill the grid and internet. Stops local spread and slowly starves the AI, but tanks local trust and research.' },
-  { id: 'deployKillSwitch', name: 'Deploy Kill Switch', icon: 'power', cost: 4, trustCost: 0, requiresUpgrade: null, toggle: false,
+  { id: 'deployKillSwitch', name: 'Deploy Kill Switch', icon: 'shield', cost: 4, trustCost: 0, requiresUpgrade: null, toggle: false,
     desc: 'Once research is complete, prioritise this nation in the Kill Switch rollout.' },
 ];

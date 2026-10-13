@@ -35,6 +35,7 @@ function makeGreedy(rng) {
   // Bot-side randomness (reaction delays) uses its own PRNG so the sim stays deterministic.
   let s = rng >>> 0 || 1;
   const rand = () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0; return s / 4294967296; };
+  const qSince = new Map();
   return {
     name: 'greedy',
     daily(g) {
@@ -73,18 +74,17 @@ function makeGreedy(rng) {
         }
         if (target) g.doAction(target.index, 'investigate');
       }
-      // Quarantine hot spots while trust allows.
-      if (g.isOwned('c_airgap')) {
-        const active = C.filter((c) => c.quarantined);
-        for (const c of active) {
-          const clean = g.links[c.index].filter((l) => !C[l.to].detected).length;
-          if (p.trust < 0.3 || clean === 0 || c.killSwitchDeployed) g.doAction(c.index, 'quarantine');
+      // Quarantine fresh hot spots early (before they seed their neighbours), release after a while.
+      if (g.isOwned('c_airgap') && !process.env.NOQ) {
+        for (const c of C.filter((x) => x.quarantined)) {
+          const since = g.day - (qSince.get(c.index) ?? g.day);
+          if (p.trust < 0.4 || since > 70 || c.killSwitchDeployed) g.doAction(c.index, 'quarantine');
         }
-        if (p.trust > 0.45 && C.filter((c) => c.quarantined).length < 4) {
-          const hot = C.filter((c) => c.detected && !c.quarantined && c.status !== 'fallen' && c.infected / c.population > 0.02
-            && g.links[c.index].filter((l) => !C[l.to].detected).length >= 3)
+        if (p.trust > 0.55 && C.filter((c) => c.quarantined).length < 3) {
+          const hot = C.filter((c) => c.detected && !c.quarantined && c.status !== 'fallen' && !c.killSwitchDeployed
+            && g.day - (qSince.get(c.index) ?? -1e9) > 100)
             .sort((a, b) => b.infected - a.infected)[0];
-          if (hot && g.canDoAction(hot.index, 'quarantine').ok) g.doAction(hot.index, 'quarantine');
+          if (hot && g.canDoAction(hot.index, 'quarantine').ok) { g.doAction(hot.index, 'quarantine'); qSince.set(hot.index, g.day); }
         }
       }
       // Endgame: push the Kill Switch to the worst-hit nations.
@@ -139,7 +139,7 @@ function run({ threat, difficulty, seed, bot }) {
   return {
     won: g.status === 'won', days: g.day, lostPct: g.world.lost / g.world.population, research: g.player.research,
     firstDet: g.stats.firstDetectionDay, resDay: g.stats.researchCompleteDay, traits: g.ai.traits.length,
-    upgrades: g.stats.upgradesBought, reason: over && over.reason, ev, issues, fallen: g.world.fallenCountries,
+    upgrades: g.stats.upgradesBought, firstPop: g._firstDetectedIndex != null ? g.countries[g._firstDetectedIndex].population : null, reason: over && over.reason, ev, issues, fallen: g.world.fallenCountries,
     g,
   };
 }
@@ -165,6 +165,30 @@ function checks() {
   console.log(`tick(): 10s at speed 3 -> day ${g.day.toFixed(2)} (expect ~50)`);
   g.speed = 0; const d0 = g.day; g.tick(1); console.log(`paused tick no-op: ${g.day === d0 ? 'OK' : 'FAIL'}`);
   console.log(`date: ${g.date.toISOString().slice(0, 10)}`);
+  // Action / upgrade semantics.
+  {
+    const h = new Game({ geo: GEO, seed: 77 });
+    const expect = (cond, msg) => { if (!cond) { ok = false; console.log('  FAIL: ' + msg); } };
+    expect(h.actionState(4, 'investigate') === 'locked', 'investigate locked before Field Agents');
+    expect(!h.canBuy('r_grants').ok, 'grants need detection');
+    h.buy('r_field');
+    expect(h.actionState(4, 'investigate') === 'available', 'investigate available');
+    h.advance(150);
+    h.player.ops = 999;
+    for (const id of ['c_monitor', 'c_firewall', 'c_traffic', 'c_airgap', 'c_patch', 'c_gridkill', 'r_grants']) h.buy(id);
+    const big = h.countries.filter((c) => c.aiPresent && c.detected).sort((a, b) => b.infected - a.infected)[0];
+    expect(h.doAction(big.index, 'shutdown') && h.actionState(big.index, 'shutdown') === 'active', 'shutdown toggles on');
+    expect(h.doAction(big.index, 'shutdown') && !big.shutdown, 'shutdown toggles off');
+    expect(h.doAction(big.index, 'quarantine') && big.quarantined, 'quarantine on');
+    for (let k = 0; k < 3; k++) h.doAction(5, 'fundLab');
+    expect(h.countries[5].labLevel === 3 && h.actionState(5, 'fundLab') === 'active', 'lab maxes at 3');
+    expect(h.actionState(big.index, 'deployKillSwitch') === 'locked', 'deploy locked before research');
+    h.player.research = 0.9999; h.advance(2);
+    expect(h.player.research === 1, 'research completes');
+    expect(h.doAction(big.index, 'deployKillSwitch') && big.killSwitchDeployed && big.status !== 'infected', 'manual deploy');
+    h.advance(400);
+    console.log(`action semantics: ${ok ? 'OK' : 'FAIL'} (forced game ended: ${h.status}, liberated ${h.stats.countriesLiberated})`);
+  }
   return ok;
 }
 
@@ -188,6 +212,7 @@ for (const bot of BOTS) {
         const r = run({ threat, difficulty, seed: 1000 + k * 7919, bot });
         res.push(r);
         allIssues = allIssues.concat(r.issues.map((x) => `${bot}/${difficulty}/${threat}/seed${k}: ${x}`));
+        if (r.firstPop != null && r.firstPop < 1e6) allIssues.push(`${bot}/${difficulty}/${threat}/seed${k}: first detection in a tiny territory (pop ${r.firstPop})`);
         if (VERBOSE) console.log(bot, difficulty, threat, k, r.won ? 'WIN ' : 'LOSE', Math.round(r.days), pct(r.lostPct), r.research.toFixed(2), 'det', r.firstDet, 'res', r.resDay, 'traits', r.traits, 'upg', r.upgrades, r.won ? '' : r.reason.slice(0, 40));
       }
       const wins = res.filter((r) => r.won).length;

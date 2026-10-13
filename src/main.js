@@ -68,18 +68,32 @@ function startGame({ aiName, threat, difficulty }) {
 // Main loop. Simulation steps are capped so a backgrounded tab doesn't fast-forward months.
 let last = performance.now();
 let uiAccum = 0;
+// Each subsystem is guarded so one exception can't stop the loop and freeze the game.
+const reported = new Set();
+function guard(name, fn) {
+  try {
+    fn();
+  } catch (err) {
+    if (!reported.has(name)) {
+      reported.add(name);
+      console.error(`[${name}]`, err);
+    }
+  }
+}
 function frame(now) {
+  requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  if (game && game.status === 'playing') game.tick(dt);
-  globe.update(dt, game);
-  globe.render();
+  if (game && game.status === 'playing') guard('sim', () => game.tick(dt));
+  guard('globe', () => {
+    globe.update(dt, game);
+    globe.render();
+  });
   uiAccum += dt;
   if (game && uiAccum >= 0.125) {
     uiAccum = 0;
-    ui.update(game);
+    guard('ui', () => ui.update(game));
   }
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 

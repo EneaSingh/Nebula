@@ -73,6 +73,12 @@ varying vec3 vWorldPos;
 ${COMMON}
 
 vec4 nz(vec2 p) { return texture2D(uNoise, p); }
+// Triplanar noise on the unit sphere: isotropic and seam-free.
+vec4 tri(vec3 p, float s, vec2 o) {
+  vec3 w = pow(abs(p), vec3(8.0));
+  w /= (w.x + w.y + w.z);
+  return nz(p.yz * s + o) * w.x + nz(p.zx * s + o + 0.37) * w.y + nz(p.xy * s + o + 0.71) * w.z;
+}
 float idAt(vec2 tc) { return floor(texture2D(uIds, tc).r * 255.0 + 0.5); }
 vec4 st0(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.25)); }
 vec4 st1(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.75)); }
@@ -176,11 +182,11 @@ void main() {
   float lane = floor((ll.y + 90.0) / 0.9);
   float lh = hash12(vec2(lane, 7.0));
   float laneY = abs(fract((ll.y + 90.0) / 0.9) - 0.5);
-  float laneOn = step(0.78, lh) * (1.0 - smoothstep(0.06, 0.06 + gw.y / 0.9 * 1.5, laneY));
+  float laneOn = step(0.86, lh) * (1.0 - smoothstep(0.06, 0.06 + gw.y / 0.9 * 1.5, laneY));
   float dir = lh > 0.81 ? 1.0 : -1.0;
   float dash = fract((ll.x + 180.0) / 360.0 * (14.0 + floor(lh * 16.0)) + dir * uTime * (0.015 + 0.03 * fract(lh * 7.0)) + lh * 3.0);
   float stream = pow(dash, 22.0) * laneOn * (1.0 - smoothstep(0.25, 0.9, gw.y / 0.9));
-  ocean += srgb(vec3(0.24, 0.88, 1.0)) * stream * 0.22;
+  ocean += srgb(vec3(0.24, 0.88, 1.0)) * stream * 0.16;
   // coastal glow
   float coastGlow = smoothstep(0.0, 0.7, glow) * (1.0 - land);
   ocean += srgb(vec3(0.10, 0.55, 0.75)) * coastGlow * 0.18;
@@ -188,7 +194,8 @@ void main() {
 
   // ---- land base ----
   vec3 col = srgb(vec3(0.035, 0.16, 0.21));
-  float relief = nz(tc * vec2(6.0, 3.0)).g * 0.6 + nz(tc * vec2(16.0, 8.0)).a * 0.4;
+  vec3 sp = normalize(vObj);
+  float relief = tri(sp, 1.6, vec2(0.0)).g * 0.6 + tri(sp, 4.5, vec2(0.0)).a * 0.4;
   col *= 0.75 + 0.5 * relief;
   col = mix(col, srgb(vec3(0.16, 0.24, 0.30)), ice * 0.65);
   // dot matrix
@@ -204,24 +211,29 @@ void main() {
   vec3 emis = vec3(0.0);
   float infV = inf * (1.0 - ks * 0.85);
   if (infV > 0.002) {
-    float cn = mix(nz(tc * vec2(8.0, 4.0) + vec2(tt * 0.0016, tt * 0.0011)).r, nz(tc * vec2(18.0, 9.0) - vec2(tt * 0.0021, 0.0)).g, 0.3);
+    float cn = mix(tri(sp, 1.3, vec2(tt * 0.0016, tt * 0.0011)).r, tri(sp, 3.2, -vec2(tt * 0.0021, 0.0)).g, 0.3);
     float thr = mix(0.92, 0.02, infV);
     float m = smoothstep(thr - 0.06, thr + 0.03, cn);
     float edge = 1.0 - smoothstep(0.0, 0.035, abs(cn - thr));
     float pulse = 0.5 + 0.5 * sin(tt * 2.6 - cn * 26.0);
-    vec3 dark = srgb(vec3(0.32, 0.02, 0.08));
+    vec3 dark = srgb(vec3(0.30, 0.02, 0.07));
     vec3 hot = srgb(vec3(1.0, 0.176, 0.333));
-    col = mix(col, dark * light + dark * 0.4, min(1.0, infV * 0.9 + 0.12));
-    col = mix(col, mix(dark, hot, 0.35 + 0.45 * pulse) * (0.55 + 0.45 * light), m);
+    float heat = tri(sp, 2.4, vec2(-tt * 0.003, tt * 0.002)).a;
+    col = mix(col, dark * (0.6 + 0.4 * light), min(1.0, infV * 0.8 + 0.15));
+    vec3 corr = mix(srgb(vec3(0.40, 0.03, 0.10)), hot, 0.18 * pulse + 0.45 * heat * heat * heat);
+    col = mix(col, corr * (0.6 + 0.4 * light), m);
     // veins of corrupted data
-    float vein = smoothstep(0.86, 0.97, nz(tc * vec2(24.0, 12.0) + vec2(0.0, tt * 0.001)).b);
+    float vein = smoothstep(0.86, 0.97, tri(sp, 5.0, vec2(0.0, tt * 0.001)).b);
     emis += hot * vein * m * (0.25 + 0.35 * pulse);
+    // the dot matrix glitches hot inside corrupted areas
+    float glitch = step(0.9, hash12(floor(dp) + floor(tt * 3.0)));
+    emis += srgb(vec3(1.0, 0.3, 0.6)) * dots * m * (0.06 + 0.6 * glitch);
     emis += srgb(vec3(1.0, 0.24, 0.94)) * edge * (0.45 + 0.4 * pulse) * smoothstep(0.0, 0.08, infV);
   }
 
   // ---- lost / assimilated: the machine's circuitry ----
   if (lost > 0.002) {
-    float ln = nz(tc * vec2(6.0, 3.0) + vec2(0.31, 0.17)).r;
+    float ln = tri(sp, 1.2, vec2(0.31, 0.17)).r;
     float lthr = mix(0.94, 0.0, lost);
     float lm = smoothstep(lthr - 0.04, lthr + 0.04, ln);
     vec2 cp = bandGrid(ll, 0.55, 12.0);
@@ -233,7 +245,7 @@ void main() {
     vec3 pulseC = srgb(vec3(1.0, 0.24, 0.94));
     vec3 lc = voidC * (0.7 + 0.3 * light);
     float tr = max(ci.x * 0.55 + ci.y, ci2.x * 0.8 + ci2.y) * cfade;
-    lc += traceC * tr * 0.55;
+    lc += traceC * tr * 0.42;
     lc += traceC * 0.10 * (1.0 - cfade);
     vec3 le = pulseC * (ci.z + ci2.z) * cfade * 1.4 + traceC * tr * 0.18;
     float lEdge = 1.0 - smoothstep(0.0, 0.03, abs(ln - lthr));
