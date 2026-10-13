@@ -1,6 +1,7 @@
 // KILL SWITCH audio: every sound is synthesized with WebAudio, no asset files.
 // Browsers only allow audio after a user gesture, so nothing plays until unlock().
 import { store } from '../ui/util.js';
+import { Music } from './music.js';
 
 const PREFS_KEY = 'killswitch.sound';
 
@@ -56,6 +57,9 @@ export class Sound {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 
     this.buildAmbience();
+    this.score = new Music(ctx, this.master, this.delay, this.noiseBuf);
+    this.score.setMode(this.pendingMode || 'menu');
+    this.score.start();
   }
 
   // Low drone under the whole game. Its filter opens and a dissonant voice fades in as tension rises.
@@ -106,11 +110,20 @@ export class Sound {
     return this.enabled;
   }
 
-  /** 'menu' | 'playing' | 'over' — fades the ambience. */
+  /** 'menu' | 'playing' | 'won' | 'lost' — switches the score and fades the drone. */
   setMode(mode) {
+    this.pendingMode = mode;
     if (!this.ctx) return;
-    const level = mode === 'playing' ? 0.16 : mode === 'menu' ? 0.09 : 0.05;
+    const level = mode === 'playing' ? 0.08 : mode === 'menu' ? 0.05 : 0.03;
     this.music.gain.setTargetAtTime(level, this.ctx.currentTime, 1.2);
+    this.score.setMode(mode);
+  }
+
+  /** Muffles the score while the game is paused. */
+  setPaused(p) {
+    if (!this.ctx || p === this.paused) return;
+    this.paused = p;
+    this.score.setPaused(p);
   }
 
   /** 0..1, driven by how much of humanity is known lost/infected. */
@@ -120,6 +133,8 @@ export class Sound {
     const now = this.ctx.currentTime;
     this.droneFilter.frequency.setTargetAtTime(260 + t * 900, now, 2);
     this.dissonance.gain.setTargetAtTime(t * 0.3, now, 2);
+    // The score reacts early: a few percent of humanity compromised already adds a pulse.
+    this.score.setIntensity(Math.sqrt(t) * 1.4);
   }
 
   // ------------------------------------------------------------ primitives

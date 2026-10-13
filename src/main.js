@@ -26,6 +26,7 @@ const ui = new UI(document.getElementById('ui'), {
   onRestart: () => {
     teardown();
     ui.showMenu();
+    sound.setPaused(false);
     sound.setMode('menu');
   },
 });
@@ -35,7 +36,7 @@ ui.setSoundEnabled(sound.enabled);
 for (const type of ['pointerdown', 'keydown']) {
   window.addEventListener(type, () => {
     sound.unlock();
-    sound.setMode(game ? 'playing' : 'menu');
+    sound.setMode(game ? (game.status === 'playing' ? 'playing' : game.status) : 'menu');
   }, { once: true, capture: true });
 }
 document.getElementById('ui').addEventListener('click', (e) => {
@@ -79,6 +80,7 @@ function updateAudio() {
   const known = knownWorld(game);
   const pop = known.population || 1;
   sound.setTension(Math.min(1, (known.lost * 2 + known.infected) / pop));
+  sound.setPaused(game.status === 'playing' && game.speed === 0);
   const p = game.player;
   const fallen = game.countries.reduce((n, c) => n + (c.status === 'fallen'), 0);
   const liberated = game.countries.reduce((n, c) => n + (c.status === 'liberated'), 0);
@@ -108,7 +110,8 @@ function startGame({ aiName, threat, difficulty }) {
     game.speed = 0;
     ui.showGameOver(result, game);
     sound.play(result.won ? 'win' : 'lose');
-    sound.setMode('over');
+    sound.setPaused(false);
+    sound.setMode(result.won ? 'won' : 'lost');
   });
   ui.bindGame(game);
   ui.hideMenu();

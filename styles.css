@@ -929,6 +929,7 @@ kbd {
 .modal-title h2 { margin: 2px 0 0; font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1; }
 .modal-head-right { display: flex; align-items: center; gap: 16px; }
 .modal-head-right .ops-chip { padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 194, 61, 0.3); background: var(--ops-dim); }
+.paused-chip { color: var(--ops); border: 1px solid rgba(255, 194, 61, 0.45); border-radius: 4px; padding: 3px 8px; animation: breathe 3s ease-in-out infinite; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); cursor: pointer; min-height: 40px; user-select: none; }
 .check-short { display: none; }
 .check input { width: 16px; height: 16px; accent-color: var(--human); margin: 0; }

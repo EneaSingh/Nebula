@@ -67,6 +67,8 @@ export class UI {
   }
 
   bindGame(game) {
+    this.pausers = new Set();
+    this.resumeSpeed = 0;
     for (const off of this.offs) off();
     this.offs = [];
     this.game = game;
@@ -251,26 +253,27 @@ export class UI {
   setPref(k, v) {
     this.prefs[k] = v;
     store.set(PREFS_KEY, this.prefs);
-    if (k === 'autoPause' && this.tree.isOpen) {
-      if (v) this.onOverlayOpen('tree');
-      else this.onOverlayClose('tree');
-    }
   }
 
+  // The Response tree and the AI dossier always pause the simulation while open, and
+  // resume at the previous speed once the last of them closes (unless the player
+  // changed the speed in the meantime).
   onOverlayOpen(kind) {
     this.tooltip.hide();
-    if (kind === 'tree' && this.prefs.autoPause && this.game && this.game.speed > 0 && this.game.status === 'playing') {
+    if (kind !== 'tree' && kind !== 'dossier') return;
+    this.pausers = this.pausers || new Set();
+    if (!this.pausers.size && this.game && this.game.speed > 0 && this.game.status === 'playing') {
       this.resumeSpeed = this.game.speed;
       this.setSpeed(0);
     }
+    this.pausers.add(kind);
   }
 
   onOverlayClose(kind) {
-    if (kind === 'tree' && this.resumeSpeed) {
-      const s = this.resumeSpeed;
-      this.resumeSpeed = 0;
-      if (this.game && this.game.speed === 0) this.setSpeed(s);
-    }
+    if (!this.pausers || !this.pausers.delete(kind) || this.pausers.size) return;
+    const s = this.resumeSpeed;
+    this.resumeSpeed = 0;
+    if (s && this.game && this.game.speed === 0) this.setSpeed(s);
   }
 
   openTree(tab) {
@@ -294,7 +297,7 @@ export class UI {
     p.el.hidden = false;
     this.root.dataset.side = id;
     requestAnimationFrame(() => p.el.classList.add('is-in'));
-    if (id === 'dossier') { this.dossier.key = null; if (this.game) this.dossier.update(this.game); }
+    if (id === 'dossier') { this.dossier.key = null; if (this.game) this.dossier.update(this.game); this.onOverlayOpen('dossier'); }
     this.hud.$[id === 'news' ? 'newsBtn' : 'dossierBtn'].setAttribute('aria-pressed', 'true');
   }
 
@@ -305,6 +308,7 @@ export class UI {
     p.el.hidden = true;
     if (this.root.dataset.side === id) delete this.root.dataset.side;
     this.hud.$[id === 'news' ? 'newsBtn' : 'dossierBtn'].setAttribute('aria-pressed', 'false');
+    if (id === 'dossier') this.onOverlayClose('dossier');
   }
 
   onKey(e) {

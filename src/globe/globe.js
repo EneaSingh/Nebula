@@ -470,7 +470,9 @@ export class Globe {
       const d = this.camera.position.length();
       if (!this._userInteracted) this.camera.position.setLength(d + (want - d) * Math.min(1, dt * 1.5));
     }
-    c.autoRotate = !this.reducedMotion && !this._focus && (!game || this._idle > 25) && !this._down;
+    // The world holds still while the game is paused (including while the Response tree or dossier is open).
+    const paused = !!game && game.status === 'playing' && game.speed === 0;
+    c.autoRotate = !this.reducedMotion && !paused && !this._focus && (!game || this._idle > 25) && !this._down;
     c.autoRotateSpeed = game ? 0.12 : 0.22;
     // Slower rotation when zoomed in.
     c.rotateSpeed = THREE.MathUtils.clamp((this.camera.position.length() - 1) * 0.28, 0.08, 0.6);

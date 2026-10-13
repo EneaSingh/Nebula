@@ -50,9 +50,6 @@ export class ResponseTree {
     this.scroller = h('div', { class: 'tree-scroll', id: 'ks-tree-body', role: 'tabpanel' }, this.grid);
     this.detail = h('aside', { class: 'tree-detail', 'aria-live': 'polite' });
     this.closeBtn = h('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Close Response tree', html: icon('close'), onclick: () => this.close() });
-    this.autoPause = h('input', { type: 'checkbox', id: 'ks-autopause' });
-    this.autoPause.checked = !!ui.prefs.autoPause;
-    this.autoPause.addEventListener('change', () => ui.setPref('autoPause', this.autoPause.checked));
 
     this.panel = h('div', { class: 'modal tree-modal glass-strong', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ks-tree-title', tabindex: '-1' },
       h('header', { class: 'modal-head' },
@@ -60,7 +57,7 @@ export class ResponseTree {
           h('span', { class: 'micro', text: 'Global Response' }),
           h('h2', { id: 'ks-tree-title' }, 'Response', h('span', { class: 'hide-phone', text: ' protocols' }))),
         h('div', { class: 'modal-head-right' },
-          h('label', { class: 'check', for: 'ks-autopause', title: 'Pause the simulation while this screen is open' }, this.autoPause, h('span', { class: 'check-long', text: 'Pause while open' }), h('span', { class: 'check-short', text: 'Pause' })),
+          h('span', { class: 'paused-chip micro', title: 'The world is paused while you plan', text: 'Paused' }),
           h('div', { class: 'ops-chip' }, h('span', { class: 'ops-ico', html: icon('ops') }), this.opsVal, h('span', { class: 'micro', text: 'Ops' })),
           this.closeBtn)),
       h('nav', { class: 'tabs', role: 'tablist', 'aria-label': 'Response branches' }, this.tabBtns),
