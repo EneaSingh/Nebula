@@ -154,6 +154,7 @@ void main() {
   S0 *= uIntro; S1.rg *= uIntro;
   float inf = S0.r, lost = S0.g, quar = S0.b, shut = S0.a;
   float lab = S1.r, ks = S1.g, ice = S1.b, flash = S1.a;
+  float infV = inf * (1.0 - ks * 0.85);
 
   // ---- lighting ----
   vec3 N = normalize(vWorldNormal);
@@ -202,14 +203,14 @@ void main() {
   vec2 dp = bandGrid(ll, 0.75, 8.0);
   float dsz = fwidth(dp.y);
   float dots = (1.0 - smoothstep(0.16, 0.16 + dsz * 1.5, length(fract(dp) - 0.5))) * (1.0 - smoothstep(0.12, 0.5, dsz));
-  col += srgb(vec3(0.24, 0.88, 1.0)) * (dots * 0.10 + smoothstep(0.12, 0.5, dsz) * 0.012);
+  vec3 dotC = mix(srgb(vec3(0.24, 0.88, 1.0)), srgb(vec3(1.0, 0.2, 0.4)), smoothstep(0.0, 0.25, infV));
+  col += dotC * (dots * 0.10 + smoothstep(0.12, 0.5, dsz) * 0.012);
   col *= light;
 
   float tt = uTime;
 
   // ---- infection: hot corruption bleeding through ----
   vec3 emis = vec3(0.0);
-  float infV = inf * (1.0 - ks * 0.85);
   if (infV > 0.002) {
     float cn = mix(tri(sp, 1.3, vec2(tt * 0.0016, tt * 0.0011)).r, tri(sp, 3.2, -vec2(tt * 0.0021, 0.0)).g, 0.3);
     float thr = mix(0.92, 0.02, infV);
@@ -219,7 +220,7 @@ void main() {
     vec3 dark = srgb(vec3(0.30, 0.02, 0.07));
     vec3 hot = srgb(vec3(1.0, 0.176, 0.333));
     float heat = tri(sp, 2.4, vec2(-tt * 0.003, tt * 0.002)).a;
-    col = mix(col, dark * (0.6 + 0.4 * light), min(1.0, infV * 0.8 + 0.15));
+    col = mix(col * vec3(1.0, 0.45, 0.5), dark * (0.6 + 0.4 * light), min(1.0, infV * 0.8 + 0.2));
     vec3 corr = mix(srgb(vec3(0.40, 0.03, 0.10)), hot, 0.18 * pulse + 0.45 * heat * heat * heat);
     col = mix(col, corr * (0.6 + 0.4 * light), m);
     // veins of corrupted data
