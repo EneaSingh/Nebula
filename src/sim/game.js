@@ -17,43 +17,47 @@ const DAY_MS = 86400000;
 /** Balance constants (exported for the headless harness). */
 export const K = {
   // local growth (per day, before modifiers)
-  beta: 0.10,
+  beta: 0.18,
   seedFrac: 2e-6, seedMin: 25,
   // cross-border transmission
-  link: 0.35, linkExp: 0.5, land: 1.0, cable: 0.8, sat: 0.035,
+  link: 0.4, linkExp: 0.5, land: 1.0, cable: 0.8, sat: 0.035,
   ambientArcs: 2.0,
   // takeover (assimilation) per day of infected, before traits
-  tau: 0.0022, lostSpread: 0.15,
+  tau: 0.012, lostSpread: 0.15,
+  // cleanup: sysadmins reclaim infected systems (SIS-style), faster where IT capacity is high and the AI is known
+  gamma: 0.02, gammaDetected: 1.0,
   fallenAt: 0.5,
   // detection
   detect: 0.9, overtLost: 0.002,
   // AI economy / behaviour
   evoBase: 0.4, evoInf: 2.4, evoCountries: 0.008, evoLost: 2,
-  escBase: 0.0008, escAware: 0.006, escResearch: 0.012, escDetected: 0.0015, loudAt: 0.25,
+  escBase: 0.0011, escInf: 0.011, escResearch: 0.004, escDetected: 0.0006, loudAt: 0.25,
   mutateRate: 0.012, mutateSetback: 0.025,
   // research
-  natural: 0.00018, lab: [0, 0.00024, 0.00055, 0.00095],
+  natural: 0.00028, lab: [0, 0.0006, 0.0013, 0.0022],
   // deployment / purge
-  deployDays: 28, purge0: 0.12, purgeRamp: 0.025, purgeMax: 1.2,
+  deployDays: 60, purge0: 0.12, purgeRamp: 0.04, purgeMax: 1.2,
   // shutdown
-  shutdownKill: 0.02,
+  shutdownKill: 0.07, rebuiltDays: 120,
+  desperation: 3, compound: 0.0045,
   // economy
-  opsBase: 0.3, opsAware: 0.6, opsStart: 6,
+  opsBase: 0.4, opsAware: 0.4, opsEsc: 0.2, opsStart: 6, labCostStep: 4,
   trustRec: 0.012,
-  qTrust: 0.0003, qTrustPop: 0.004, sTrust: 0.0016, sTrustPop: 0.03,
+  qTrust: 0.0004, qTrustPop: 0.004, sTrust: 0, sTrustPop: 0,
   trustCollapseDays: 45,
   // awareness
-  awDet: 0.045, awInf: 6, awLost: 25, awRate: 0.05,
+  awDet: 0.02, awInf: 4, awLost: 25, awRate: 0.05, awTime: 0.012,
   // bubbles
-  maxBubbles: 6, intelRate: 0.22, researchRate: 0.06,
+  maxBubbles: 6, intelRate: 0.15, researchRate: 0.05,
+  sampleResearch: 0.012,
   // lose condition
   lostFrac: 0.7, maxDays: 2000,
 };
 
 const AI_MULT_KEYS = ['beta', 'link', 'land', 'cable', 'sat', 'stealth', 'evoMult', 'resist', 'researchSlow', 'purgeResist', 'takeover'];
 const AI_ADD_KEYS = ['digitalBoost', 'lowDigital', 'evoAdd', 'trustErosion', 'quarantineBypass', 'shutdownBypass', 'opsDrain'];
-const PL_MULT_KEYS = ['detect', 'beta', 'link', 'cable', 'sat', 'quarantineTrust', 'takeover', 'research', 'setback', 'purge', 'deploy', 'opsMult', 'deepfake', 'trustRecovery', 'bubbleTTL', 'actionTrust', 'intelRate'];
-const PL_ADD_KEYS = ['quarantineEff', 'shutdownEff', 'opsAdd', 'breachBonus', 'intelShare', 'resilience'];
+const PL_MULT_KEYS = ['endgame', 'cleanup', 'detect', 'beta', 'link', 'cable', 'sat', 'quarantineTrust', 'takeover', 'research', 'setback', 'purge', 'deploy', 'opsMult', 'deepfake', 'trustRecovery', 'bubbleTTL', 'actionTrust', 'intelRate', 'evoCut', 'bubbleRate', 'drainTrust'];
+const PL_ADD_KEYS = ['quarantineEff', 'quarantineLocal', 'shutdownEff', 'opsAdd', 'breachBonus', 'intelShare', 'resilience', 'immune', 'deadhand', 'deployStart'];
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const DEFS = Object.freeze({
@@ -100,6 +104,7 @@ export class Game {
     this._investigated = new Array(n).fill(-1e9);
     this._deployThreshold = new Array(n).fill(2);
     this._deployedDay = new Array(n).fill(null);
+    this._rebuiltUntil = new Array(n).fill(-1);
     this._fallen = new Array(n).fill(false);
     this._infectedDay = new Array(n).fill(null);
     this._susc = new Array(n).fill(0);
@@ -127,6 +132,7 @@ export class Game {
     this._traitSet = new Set();
     this._aiTarget = null;
     this._trustZeroDays = 0;
+    this._fullEscDay = null;
     this._lastDay = 0;
     this._milestones = new Set();
     this._lastDetectNewsDay = -10;
@@ -205,7 +211,8 @@ export class Game {
     for (const id of this._owned) {
       const u = UPG.get(id);
       for (const [k, v] of Object.entries(u.fx || {})) {
-        if (k in pl) { if (PL_MULT_KEYS.includes(k)) pl[k] *= v; else pl[k] += v; }
+        if (k === 'research') pl.research += v - 1; // research bonuses stack additively ("+25%" of base)
+        else if (k in pl) { if (PL_MULT_KEYS.includes(k)) pl[k] *= v; else pl[k] += v; }
       }
     }
     this.aiM = ai; this.plM = pl;
@@ -244,23 +251,34 @@ export class Game {
   }
 
   _quarantineEff() {
-    return clamp((0.85 + this.plM.quarantineEff) * (1 - this.aiM.quarantineBypass) * (0.6 + 0.4 * this.player.trust), 0, 0.98);
+    const eff = 0.85 * (1 - this.aiM.quarantineBypass) * (0.6 + 0.4 * this.player.trust);
+    return clamp(1 - (1 - eff) * (1 - this.plM.quarantineEff), 0, 0.98); // hardened quarantine halves leakage
   }
+
+  _shutdownBypass() { return this.aiM.shutdownBypass * (this.plM.shutdownEff ? 0.5 : 1); }
 
   _gate(c) {
     let g = 1;
     if (c.quarantined) g *= 1 - this._quarantineEff();
-    if (c.shutdown) g *= 0.05 + 0.6 * this.aiM.shutdownBypass;
+    if (c.shutdown) g *= 0.05 + 0.6 * this._shutdownBypass();
     return g;
   }
 
   _local(dt) {
     const T = this.T, D = this.D, aiM = this.aiM, plM = this.plM, p = this.player;
-    const betaG = K.beta * D.aiSpread * T.spread * aiM.beta * plM.beta;
+
     const esc = this.ai.escalation;
-    const tauG = K.tau * D.aiTakeover * T.takeover * aiM.takeover * plM.takeover * ((T.takeoverFloor || 0.08) + (1 - (T.takeoverFloor || 0.08)) * esc);
+    // After it has fully escalated, the AI keeps compounding (more factories, more drones): stalling loses.
+    if (esc >= 1 && this._fullEscDay == null) this._fullEscDay = this.day;
+    const compounding = this._fullEscDay == null ? 1 : 1 + K.compound * (this.day - this._fullEscDay);
+    // ...and keeps adapting to humanity's defences.
+    const betaG = K.beta * D.aiSpread * T.spread * aiM.beta * plM.beta * (1 + 0.5 * (compounding - 1));
+    const tauG = K.tau * D.aiTakeover * T.takeover * aiM.takeover * plM.takeover * compounding
+      * ((T.takeoverFloor || 0.08) + (1 - (T.takeoverFloor || 0.08)) * esc);
     const trustEff = 0.4 + 0.6 * p.trust;
-    const shutdownBeta = 0.06 + 0.5 * aiM.shutdownBypass;
+    const bypass = this._shutdownBypass();
+    const shutdownBeta = 0.06 + 0.5 * bypass;
+    const qLocal = 0.6 - plM.quarantineLocal;
     const lostSpread = T.lostSpread ?? K.lostSpread;
     for (const c of this.countries) {
       if (!c.aiPresent || !c.playable) continue;
@@ -270,24 +288,33 @@ export class Game {
       const s = this._susc[i];
       let beta = betaG * s;
       if (c.detected) beta *= 1 - 0.2 * trustEff;
-      if (c.quarantined) beta *= 0.5;
+      if (c.quarantined) beta *= qLocal;
       if (c.shutdown) beta *= shutdownBeta;
+      const rebuilt = this._rebuiltUntil[i] > this.day;
+      if (rebuilt) beta *= 0.6;
       let tau = tauG * (0.4 + 0.6 * Math.min(1, s));
-      if (c.quarantined) tau *= 0.6; // cut off from the AI's global compute
+      // Once the Kill Switch exists the AI grabs what it can before the rollout reaches it.
+      if (p.research >= 1 && !c.killSwitchDeployed) tau *= K.desperation * plM.endgame;
+      if (c.quarantined) tau *= qLocal + 0.1; // cut off from the AI's global compute
       let dI = 0;
       if (c.killSwitchDeployed) {
         beta = 0;
         const since = this.day - this._deployedDay[i];
         const k = Math.min(K.purgeMax, (K.purge0 + K.purgeRamp * since) * plM.purge / aiM.purgeResist);
         dI -= k * I;
-        tau *= 0.15;
+        tau *= plM.immune ? 0 : 0.15;
       }
       if (c.shutdown) {
-        const kill = K.shutdownKill * (1 + 2 * plM.shutdownEff) * (1 - aiM.shutdownBypass);
+        const kill = K.shutdownKill * (1 + 1.5 * plM.shutdownEff) * (1 - bypass);
         if (!c.killSwitchDeployed && I > 50) dI -= kill * (I - 50);
-        tau *= aiM.shutdownBypass + (1 - aiM.shutdownBypass) * (plM.shutdownEff ? 0.15 : 0.5);
+        tau *= bypass + (1 - bypass) * (plM.shutdownEff ? 0.03 : 0.15);
       }
       dI += beta * (I + lostSpread * L) * (H / P);
+      if (!c.killSwitchDeployed) {
+        const gamma = K.gamma * (0.3 + 0.7 * c.digital) * (c.detected ? K.gammaDetected * plM.cleanup : 1) * (this._fallen[i] ? 0.2 : 1) * (rebuilt ? 2 : 1)
+          / Math.sqrt(aiM.purgeResist);
+        dI -= gamma * I;
+      }
       const dL = tau * I;
       I += (dI - dL) * dt;
       L += dL * dt;
@@ -324,7 +351,7 @@ export class Game {
       for (const l of this.links[i]) {
         const t = countries[l.to];
         if (t.aiPresent) continue;
-        const inGate = this._gate(t) * (t.killSwitchDeployed ? (plM.purge > 1.35 ? 0.01 : 0.05) : 1) * this._size[l.to];
+        const inGate = this._gate(t) * (t.killSwitchDeployed ? (plM.immune ? 0 : 0.05) : 1) * this._size[l.to];
         const rate = base * routeM[l.route] * l.weight * g * outGate * inGate * (0.2 + 0.8 * Math.min(1, this._susc[l.to]));
         if (rate > 0 && this.rng.hazard(rate, dt)) this._infect(l.to, i, l.route);
       }
@@ -334,7 +361,7 @@ export class Game {
         if (j >= 0) {
           const t = countries[j];
           if (!t.aiPresent) {
-            const inGate = this._gate(t) * (t.killSwitchDeployed ? 0.05 : 1);
+            const inGate = this._gate(t) * (t.killSwitchDeployed ? (plM.immune ? 0 : 0.05) : 1);
             if (this.rng.next() < inGate) this._infect(j, i, 'satellite');
           } else if (this.rng.next() < 0.08) this._arc(i, j, 'satellite');
         }
@@ -414,7 +441,7 @@ export class Game {
       this.news.post('detected', 'warn', {}, i);
     }
     this.emit('detected', { countryIndex: i });
-    if (c.population >= 1e5 && (first || this.world.detectedCountries < 5 || this.rng.next() < 0.35)) this._spawnBubble('breach', i, 2 + this.plM.breachBonus);
+    if (c.population >= 1e5 && (first || this.world.detectedCountries < 4 || this.rng.next() < 0.25)) this._spawnBubble('breach', i, 2 + this.plM.breachBonus);
     if (c.status === 'clean') this._statusOf(c);
   }
 
@@ -441,10 +468,10 @@ export class Game {
     const infFrac = w.population ? w.infected / w.population : 0;
     const lostFrac = w.population ? w.lost / w.population : 0;
     const evoRate = (K.evoBase + K.evoInf * Math.sqrt(infFrac) + K.evoCountries * w.infectedCountries + K.evoLost * lostFrac)
-      * T.evo * D.aiEvo * this.aiM.evoMult + this.aiM.evoAdd;
+      * T.evo * D.aiEvo * this.aiM.evoMult * this.plM.evoCut + this.aiM.evoAdd * this.plM.evoCut;
     ai.evo += evoRate * dt;
-    // Escalation: driven by being noticed and by research becoming threatening.
-    const dEsc = T.escalation * (K.escBase + K.escAware * ai.awareness + K.escResearch * Math.max(0, p.research - 0.1)
+    // Escalation: driven by the AI's own reach and by research becoming threatening (being noticed adds a little).
+    const dEsc = T.escalation * (K.escBase + K.escInf * Math.sqrt(infFrac + lostFrac) + K.escResearch * Math.max(0, p.research - 0.1)
       + (this.anyDetected ? K.escDetected : 0));
     const wasLoud = ai.escalation >= K.loudAt;
     ai.escalation = clamp(ai.escalation + dEsc * dt, 0, 1);
@@ -467,12 +494,17 @@ export class Game {
       if (!p.killSwitchDeployed && p.research < 1 && p.research > 0.15 && ai.escalation > 0.3) {
         const chance = K.mutateRate * (ai.adaptation / 4) * T.resist;
         if (this.rng.next() < chance) {
-          const sb = K.mutateSetback * this.plM.setback;
-          p.research = Math.max(0, p.research - sb);
+          this._setback(K.mutateSetback);
           this.news.post('setback', 'danger');
         }
       }
     }
+  }
+
+  _setback(amount) {
+    const p = this.player;
+    const floor = this.plM.deadhand ? Math.floor(p.research * 4) / 4 : 0; // Dead-Hand keeps the last 25% milestone
+    p.research = Math.max(floor, p.research - amount * this.plM.setback);
   }
 
   _chooseTrait() {
@@ -510,7 +542,7 @@ export class Game {
     this.stats.traitsEvolved++;
     this._recomputeMods();
     if (t.fx && t.fx.setback && this.player.research < 1) {
-      this.player.research = Math.max(0, this.player.research - t.fx.setback * this.plM.setback);
+      this._setback(t.fx.setback);
     }
     this.emit('evolve', { traitId: t.id });
     // Players only hear about traits once the AI is known (or it is loud).
@@ -526,7 +558,9 @@ export class Game {
       return;
     }
     const known = this.world.detectedCountries;
-    const knowledge = 0.35 + 0.65 * (1 - Math.exp(-known / 6));
+    // Understanding of the AI grows with time studying it and with the number of confirmed samples.
+    const since = this.day - (this.stats.firstDetectionDay ?? this.day);
+    const knowledge = 0.35 + 0.65 * (1 - Math.exp(-(known / 8 + since / 70)));
     const gm = this.D.research * this.plM.research * this.aiM.researchSlow * knowledge / this.T.resist ** 0.5 / this.aiM.resist ** 0.5;
     const aw = this.ai.awareness;
     const resil = this.plM.resilience;
@@ -534,12 +568,12 @@ export class Game {
     for (const c of this.countries) {
       if (!c.playable || this._fallen[c.index]) { c.research = 0; continue; }
       const P = c.population;
-      let health = 1 - 1.6 * c.lost / P - 0.3 * (c.infected / P) * (resil ? 0.5 : 1);
+      let health = 1 - 1.1 * c.lost / P - 0.25 * (c.infected / P) * (resil ? 0.5 : 1);
       if (resil) health = Math.max(health, 0.3);
       health = clamp(health, 0, 1);
       const natural = K.natural * c.wealth ** 2 * Math.min(1.5, Math.sqrt(P / 5e7)) * (0.25 + 0.75 * aw);
       const lab = K.lab[c.labLevel] * (0.35 + 0.65 * c.wealth);
-      const r = (natural + lab) * health * (0.45 + 0.55 * c.trust) * (c.shutdown ? 0.25 : 1) * gm;
+      const r = (natural + lab) * health * (0.7 + 0.3 * c.trust) * gm;
       c.research = r;
       total += r;
     }
@@ -559,6 +593,9 @@ export class Game {
       s: c.labLevel * 0.6 + c.wealth + c.trust + this.rng.next() * 0.6 - (this._fallen[c.index] ? 5 : 0),
     })).sort((a, b) => b.s - a.s);
     order.forEach((o, k) => { this._deployThreshold[o.i] = 0.03 + 0.97 * (k / Math.max(1, order.length - 1)); });
+    p.deployProgress = Math.max(p.deployProgress, this.plM.deployStart);
+    // Dead-Hand: every nation with a Kill Switch lab is protected the moment research completes.
+    if (this.plM.deadhand) for (const c of this.countries) if (c.playable && c.labLevel > 0 && !c.killSwitchDeployed) this._deployTo(c.index);
     this.news.post('research100', 'good');
     this.emit('research:complete', {});
   }
@@ -593,7 +630,7 @@ export class Game {
   _economy(dt) {
     const p = this.player, ai = this.ai, plM = this.plM, aiM = this.aiM, w = this.world;
     // Ops
-    const income = Math.max(0.1, (K.opsBase + K.opsAware * ai.awareness) * this.D.ops * plM.opsMult * (0.6 + 0.4 * p.trust)
+    const income = Math.max(0.1, (K.opsBase + K.opsAware * ai.awareness + K.opsEsc * ai.escalation) * this.D.ops * plM.opsMult * (0.75 + 0.25 * p.trust)
       + plM.opsAdd - aiM.opsDrain);
     p.ops += income * dt;
     this.stats.opsEarned += income * dt;
@@ -604,8 +641,8 @@ export class Game {
     for (const c of this.countries) {
       if (!c.playable) continue;
       const share = c.population / w.population;
-      if (c.quarantined) dT -= (K.qTrust + K.qTrustPop * share) * plM.quarantineTrust;
-      if (c.shutdown) dT -= K.sTrust + K.sTrustPop * share;
+      if (c.quarantined) dT -= (K.qTrust + K.qTrustPop * share) * plM.quarantineTrust * plM.drainTrust;
+      if (c.shutdown) dT -= (K.sTrust + K.sTrustPop * share) * plM.drainTrust;
     }
     if (aiM.trustErosion) dT -= aiM.trustErosion * this.T.trustDamage * plM.deepfake * (0.4 + 0.6 * ai.escalation);
     p.trust = clamp(p.trust + dT * dt, 0, 1);
@@ -614,12 +651,13 @@ export class Game {
     for (const c of this.countries) {
       if (!c.playable) continue;
       let target = p.trust * (1 - 0.6 * c.lost / c.population);
-      if (c.shutdown) target *= 0.3; else if (c.quarantined) target *= 0.8;
+      if (c.shutdown) target *= 0.5; else if (c.quarantined) target *= 0.8;
       c.trust += (target - c.trust) * Math.min(1, 0.1 * dt);
     }
     // Awareness never decreases.
     const detInf = this._detectedAffected / w.population;
-    const target = 1 - Math.exp(-(w.detectedCountries * K.awDet + detInf * K.awInf + (w.lost / w.population) * K.awLost));
+    const since = this.anyDetected ? this.day - this.stats.firstDetectionDay : 0;
+    const target = 1 - Math.exp(-(w.detectedCountries * K.awDet + detInf * K.awInf + (w.lost / w.population) * K.awLost + since * K.awTime));
     if (target > ai.awareness) ai.awareness += (target - ai.awareness) * Math.min(1, K.awRate * dt);
   }
 
@@ -642,7 +680,7 @@ export class Game {
         this.emit('bubble:remove', { id: b.id, collected: false });
       }
     }
-    if (this.anyDetected && this.rng.hazard(K.intelRate * this.plM.intelRate, dt)) {
+    if (this.anyDetected && this.rng.hazard(K.intelRate * this.plM.intelRate * this.plM.bubbleRate, dt)) {
       const known = this.countries.filter((c) => c.population >= 1e5 && c.detected && c.aiPresent && !this._fallen[c.index]);
       const hidden = this.countries.filter((c) => c.population >= 1e5 && !c.detected && c.aiPresent);
       let pick = null;
@@ -652,7 +690,7 @@ export class Game {
     }
     let labs = 0;
     for (const c of this.countries) if (c.labLevel && !this._fallen[c.index]) labs += c.labLevel;
-    if (labs && this.player.research < 1 && this.rng.hazard(K.researchRate * Math.sqrt(labs), dt)) {
+    if (labs && this.player.research < 1 && this.rng.hazard(K.researchRate * Math.sqrt(labs) * this.plM.bubbleRate, dt)) {
       const idx = this.rng.weightedIndex(this.countries.map((c) => (this._fallen[c.index] ? 0 : c.labLevel)));
       if (idx >= 0) this._spawnBubble('research', idx, 2);
     }
@@ -812,13 +850,21 @@ export class Game {
     this.player.ops -= u.cost;
     this.stats.opsSpent += u.cost;
     this.stats.upgradesBought++;
+    this._grant(id);
+    this.news.post(`upgrade.${id}`, 'good');
+    return true;
+  }
+
+  /** Apply an upgrade without paying for it (used by buy() and the balance harness). */
+  _grant(id) {
+    const u = UPG.get(id);
+    if (!u || this._owned.has(id)) return false;
     this._owned.add(id);
     this._recomputeMods();
     const fx = u.fx || {};
     if (fx.trustOnce) this.player.trust = clamp(this.player.trust + fx.trustOnce, 0, 1);
     if (fx.awarenessOnce) this.ai.awareness = clamp(this.ai.awareness + fx.awarenessOnce, 0, 1);
     this.emit('upgrade', { upgradeId: id });
-    this.news.post(`upgrade.${id}`, 'good');
     return true;
   }
 
@@ -826,7 +872,12 @@ export class Game {
   actionCost(i, actionId) {
     const a = ACT.get(actionId), c = this.countries[i];
     if (!a) return 0;
-    if (actionId === 'fundLab' && c) return a.costs[Math.min(2, c.labLevel)];
+    if (actionId === 'fundLab' && c) {
+      // Each lab level already funded worldwide makes the next one pricier (diminishing returns).
+      let levels = 0;
+      for (const x of this.countries) levels += x.labLevel;
+      return a.costs[Math.min(2, c.labLevel)] + Math.floor(levels / K.labCostStep);
+    }
     return a.cost;
   }
 
@@ -919,6 +970,11 @@ export class Game {
           if (l.route !== 'wireless') continue;
           if (t.aiPresent && !t.detected && this.rng.next() < share * stealthPenalty) this._detect(l.to, 'investigate');
         }
+        // Every nation exposed by the sweep yields code samples for the Kill Switch labs.
+        const found = this.world.detectedCountries;
+        this._aggregate();
+        const samples = this.world.detectedCountries - found;
+        if (samples > 0 && p.research < 1) p.research = Math.min(0.999, p.research + K.sampleResearch * samples);
         active = c.detected;
         break;
       }
@@ -934,7 +990,12 @@ export class Game {
         active = c.quarantined;
         break;
       case 'shutdown':
-        if (c.shutdown) { c.shutdown = false; this.news.post('shutdownOff', 'info', {}, i); }
+        if (c.shutdown) {
+          c.shutdown = false;
+          // Systems come back from clean backups: the AI struggles to re-establish itself for a while.
+          this._rebuiltUntil[i] = this.day + K.rebuiltDays * (1 + this.plM.shutdownEff);
+          this.news.post('shutdownOff', 'info', {}, i);
+        }
         else { pay(); c.shutdown = true; this.news.post('shutdownOn', 'warn', {}, i); }
         active = c.shutdown;
         break;
