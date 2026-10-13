@@ -32,13 +32,16 @@ const ui = new UI(document.getElementById('ui'), {
 });
 ui.setSoundEnabled(sound.enabled);
 
-// Audio may only start after a user gesture; the first click or key unlocks it.
-for (const type of ['pointerdown', 'keydown']) {
-  window.addEventListener(type, () => {
-    sound.unlock();
-    sound.setMode(game ? (game.status === 'playing' ? 'playing' : game.status) : 'menu');
-  }, { once: true, capture: true });
+// Audio may only start after a user gesture. Browsers differ on which events count
+// (iOS ignores touch-down), so keep trying on each gesture until the output is running.
+function tryUnlock() {
+  if (!sound.enabled) return;
+  sound.unlock();
+  sound.setMode(game ? (game.status === 'playing' ? 'playing' : game.status) : 'menu');
+  if (sound.running) for (const type of GESTURES) window.removeEventListener(type, tryUnlock, true);
 }
+const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+for (const type of GESTURES) window.addEventListener(type, tryUnlock, true);
 document.getElementById('ui').addEventListener('click', (e) => {
   if (e.target.closest('button, [role="tab"], [role="radio"], summary')) sound.play('click');
 });

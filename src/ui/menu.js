@@ -93,7 +93,8 @@ export class Menu {
                 HOW_TO.map(([ic, txt]) => h('li', {}, h('span', { class: 'howto-ico', html: icon(ic) }), h('span', { html: txt })))),
               h('p', { class: 'hint howto-keys' },
                 h('kbd', { text: 'Space' }), ' pause ', h('kbd', { text: '1' }), h('kbd', { text: '2' }), h('kbd', { text: '3' }),
-                ' speed ', h('kbd', { text: 'R' }), ' response ', h('kbd', { text: 'Esc' }), ' close')),
+                ' speed ', h('kbd', { text: 'R' }), ' response ', h('kbd', { text: 'M' }), ' sound ', h('kbd', { text: 'Esc' }), ' close'),
+              h('p', { class: 'hint', text: 'Sound starts when you begin. No sound on a phone? Turn up the media volume and switch off silent mode.' })),
           ),
           h('p', { class: 'menu-foot', text: 'No AIs were harmed in the making of this simulation. Yet.' }),
         )));

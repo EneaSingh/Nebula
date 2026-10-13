@@ -25,7 +25,41 @@ export class Sound {
   unlock() {
     if (!this.supported) return;
     if (!this.ctx) this.build();
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    if (this.ctx.state !== 'running' || !this.primed) {
+      // iOS: a buffer started inside the gesture fully wakes the audio output.
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.ctx.createBuffer(1, 1, 22050);
+      src.connect(this.ctx.destination);
+      src.start(0);
+      this.primed = true;
+    }
+    this.bypassSilentSwitch();
+  }
+
+  get running() {
+    return !!this.ctx && this.ctx.state === 'running';
+  }
+
+  // iPhones mute Web Audio when the ringer is on silent. Declaring a "playback" audio
+  // session (Safari 16.4+), or holding a silent <audio> element for older versions,
+  // makes the game behave like a music or video app instead.
+  bypassSilentSwitch() {
+    if (this.sessionSet) return;
+    this.sessionSet = true;
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    } catch { /* not supported */ }
+    if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return;
+    try {
+      const el = document.createElement('audio');
+      el.src = silentWav();
+      el.loop = true;
+      el.setAttribute('playsinline', '');
+      el.volume = 0.01;
+      el.play().catch(() => {});
+      this.keepAlive = el;
+    } catch { /* ignore */ }
   }
 
   build() {
@@ -184,6 +218,22 @@ export class Sound {
     const fn = BANK[name];
     if (fn) fn(this, opts);
   }
+}
+
+// One second of 8 kHz silence as a WAV data URI, built at runtime.
+function silentWav() {
+  const n = 8000;
+  const bytes = new Uint8Array(44 + n);
+  const v = new DataView(bytes.buffer);
+  const str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  str(36, 'data'); v.setUint32(40, n, true);
+  bytes.fill(128, 44); // 8-bit PCM silence is the midpoint
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return 'data:audio/wav;base64,' + btoa(bin);
 }
 
 // Minimum seconds between repeats of the same sound, so busy moments don't turn to noise.
