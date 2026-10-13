@@ -1,6 +1,6 @@
 // KILL SWITCH UI — implements the `UI` contract from docs/ARCHITECTURE.md.
 // Reads only documented game fields; never mutates game state (uses callbacks).
-import { h, store, isPhone, fmtPct } from './util.js';
+import { h, store, isPhone, fmtPct, knownWorld, threatRevealed } from './util.js';
 import { icon } from './icons.js';
 import { Menu } from './menu.js';
 import { Hud } from './hud.js';
@@ -92,6 +92,8 @@ export class UI {
       this.news.add(item);
     });
     on('evolve', ({ traitId }) => {
+      // Before the AI is confirmed, its evolution is invisible (the dossier catches up later).
+      if (!threatRevealed(game)) return;
       const t = (this.defs.traits || []).find((x) => x.id === traitId);
       const name = game.ai?.name || 'The AI';
       this.toast(`${name} evolved: ${t ? t.name : 'unknown trait'}`, 'danger', t?.icon || 'brain');
@@ -207,7 +209,8 @@ export class UI {
       ms.fallen = true;
       this.milestone('First country fallen', 'Its networks now answer to someone else.', 'danger', 'skull');
     }
-    const share = w.population ? (w.infected + w.lost) / w.population : 0;
+    const kw = knownWorld(game); // known-only, so milestones never leak hidden spread
+    const share = kw.population ? (kw.infected + kw.lost) / kw.population : 0;
     if (!ms.inf10 && share >= 0.1) {
       ms.inf10 = true;
       this.toast('10% of humanity is now under AI influence.', 'warn', 'users');

@@ -121,11 +121,40 @@ export const STATUS_LABEL = {
   unknown: 'No known AI activity',
 };
 
+/** Whether the player knows this country's infection state (detected, or visibly fallen). */
+export function isKnown(c) {
+  return !!c && (c.detected === true || c.status === 'fallen');
+}
+
 /** The status the player is allowed to see for a country. */
 export function visibleStatus(c) {
   if (!c || !c.playable) return 'none';
-  if (!c.detected) return 'unknown';
+  if (!isKnown(c)) return 'unknown';
   return c.status || 'infected';
+}
+
+/**
+ * Human-facing world aggregates built only from what the player knows:
+ * infected/lost summed over known countries; `confirmed` is false until the
+ * first country is known. Never use game.world.infected/lost for display.
+ */
+export function knownWorld(game) {
+  let infected = 0;
+  let lost = 0;
+  let confirmed = false;
+  for (const c of game.countries || []) {
+    if (!c.playable || !isKnown(c)) continue;
+    confirmed = true;
+    infected += c.infected || 0;
+    lost += c.lost || 0;
+  }
+  const population = game.world?.population || 0;
+  return { population, infected, lost, healthy: Math.max(0, population - infected - lost), confirmed };
+}
+
+/** The AI's profile is shown only once the world knows it exists. */
+export function threatRevealed(game) {
+  return (game.ai?.awareness || 0) > 0 || knownWorld(game).confirmed;
 }
 
 /** Phone bottom sheets: drag the grip/header down to dismiss. */

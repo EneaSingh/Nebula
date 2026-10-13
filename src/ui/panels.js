@@ -1,5 +1,5 @@
 // Side panels (AI dossier, news log), toasts, milestone banners and hover tooltip.
-import { h, setText, setWidth, fmtNum, fmtPct, pad3, STATUS_LABEL, visibleStatus, enableSheetSwipe } from './util.js';
+import { h, setText, setWidth, fmtNum, fmtPct, pad3, STATUS_LABEL, visibleStatus, enableSheetSwipe, isKnown, threatRevealed } from './util.js';
 import { icon } from './icons.js';
 
 const CATS = [
@@ -63,16 +63,19 @@ export class Dossier {
     const t = (this.ui.defs.threats || []).find((x) => x.id === ai.threat);
     setText(this.$.type, t ? `${t.name} class` : '');
     setText(this.$.tagline, t?.tagline || '');
+    // Nothing about the AI's capabilities is known until it is confirmed to exist.
+    const revealed = threatRevealed(game);
+    this.el.classList.toggle('is-unknown', !revealed);
     for (const [k, b] of Object.entries(this.$.bars)) {
       const v = Number(ai[k]) || 0;
-      setWidth(b.fill, v / 10);
-      setText(b.val, v.toFixed(1));
+      setWidth(b.fill, revealed ? v / 10 : 0);
+      setText(b.val, revealed ? v.toFixed(1) : '??');
     }
     setWidth(this.$.awareFill, ai.awareness);
     setText(this.$.awareVal, fmtPct(ai.awareness));
 
-    const traits = ai.traits || [];
-    const key = traits.join(',') + '|' + [...this.fresh].join(',');
+    const traits = revealed ? ai.traits || [] : [];
+    const key = `${revealed}|` + traits.join(',') + '|' + [...this.fresh].join(',');
     if (key === this.key) return;
     this.key = key;
     const all = this.ui.defs.traits || [];
@@ -93,7 +96,8 @@ export class Dossier {
             h('div', {}, h('span', { class: 'redact', style: { width: `${52 + ((i * 37) % 40)}%` } }), h('span', { class: 'redact redact-2', style: { width: `${70 + ((i * 23) % 25)}%` } }))))),
       );
     }));
-    if (!traits.length) this.$.cats.prepend(h('p', { class: 'hint', text: 'No traits observed yet. It is either very simple or very patient.' }));
+    if (!revealed) this.$.cats.prepend(h('p', { class: 'hint dos-unconfirmed', text: 'No confirmed sightings. Until we find it, everything in this file is speculation.' }));
+    else if (!traits.length) this.$.cats.prepend(h('p', { class: 'hint', text: 'No traits observed yet. It is either very simple or very patient.' }));
     clearTimeout(this.freshT);
     if (this.fresh.size) this.freshT = setTimeout(() => { this.fresh.clear(); this.key = null; }, 6000);
   }
@@ -232,7 +236,7 @@ export class Tooltip {
       this.status.hidden = false;
       setText(this.status, vis === 'unknown' ? 'No known activity' : STATUS_LABEL[vis]);
       this.status.dataset.status = vis;
-      if (c.detected) {
+      if (isKnown(c)) {
         const pct = c.population ? c.infected / c.population : 0;
         setText(this.line, `${fmtNum(c.population)} pop · ${fmtPct(pct, pct < 0.1 && pct > 0 ? 1 : 0)} infected${c.lost ? ` · ${fmtNum(c.lost)} lost` : ''}`);
       } else {

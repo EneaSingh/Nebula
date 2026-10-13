@@ -1319,3 +1319,11 @@ kbd {
 @media (max-width: 760px) {
   .country-panel::after, .side-panel::after, .modal::after { display: none; }
 }
+
+/* ---------------------------------------------------------------- unconfirmed threat (hidden info) */
+.vitals.is-unconfirmed .lg-i b, .vitals.is-unconfirmed .lg-l b { color: var(--ink-3); font-family: var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; font-size: 11px; }
+.threat.is-unknown .stat-row:not(.stat-aware) b, .side-dossier.is-unknown .stat-row:not(.stat-aware) b { color: var(--ink-4); }
+.threat.is-unknown .stat-row:not(.stat-aware) .mini, .side-dossier.is-unknown .stat-row:not(.stat-aware) .mini {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 4px, transparent 4px 7px);
+}
+.threat.is-unknown .ai-traits { color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; }

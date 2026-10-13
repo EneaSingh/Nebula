@@ -1,6 +1,6 @@
 // In-game HUD: top bar (clock, speed, ops, trust), news ticker, bottom bar
 // (AI threat readout, population split, Kill Switch progress, Response button).
-import { h, setText, setWidth, toggleClass, fmtNum, fmtPct, fmtDate, pad3, clamp01, reducedMotion } from './util.js';
+import { h, setText, setWidth, toggleClass, fmtNum, fmtPct, fmtDate, pad3, clamp01, reducedMotion, knownWorld, threatRevealed } from './util.js';
 import { icon } from './icons.js';
 
 const STATS = [
@@ -173,8 +173,7 @@ export class Hud {
   update(game) {
     const $ = this.$;
     const p = game.player || {};
-    const w = game.world || {};
-    const ai = game.ai || {};
+        const ai = game.ai || {};
 
     setText($.day, pad3(game.day));
     setText($.date, fmtDate(game.date));
@@ -187,15 +186,17 @@ export class Hud {
     toggleClass($.trust, 'is-low', p.trust < 0.35);
     toggleClass($.trust, 'is-crit', p.trust < 0.2);
 
-    // population
-    const pop = w.population || 1;
-    setText($.popTotal, fmtNum(w.population));
-    setWidth($.segH, w.healthy / pop);
-    setWidth($.segI, w.infected / pop);
-    setWidth($.segL, w.lost / pop);
-    setText($.numH, fmtNum(w.healthy));
-    setText($.numI, fmtNum(w.infected));
-    setText($.numL, fmtNum(w.lost));
+    // population: only what the player knows (never game.world.infected/lost)
+    const kw = knownWorld(game);
+    const pop = kw.population || 1;
+    setText($.popTotal, fmtNum(kw.population));
+    setWidth($.segH, kw.healthy / pop);
+    setWidth($.segI, kw.infected / pop);
+    setWidth($.segL, kw.lost / pop);
+    setText($.numH, fmtNum(kw.healthy));
+    setText($.numI, kw.confirmed ? fmtNum(kw.infected) : 'Unknown');
+    setText($.numL, kw.confirmed ? fmtNum(kw.lost) : 'Unknown');
+    toggleClass($.vitals, 'is-unconfirmed', !kw.confirmed);
 
     // research
     const deploying = (p.research || 0) >= 1 || p.killSwitchDeployed || (p.deployProgress || 0) > 0;
@@ -220,15 +221,17 @@ export class Hud {
     setText($.aiName, ai.name || 'UNKNOWN');
     const t = (this.ui.defs.threats || []).find((x) => x.id === ai.threat);
     setText($.aiType, t ? t.name : '');
+    const revealed = threatRevealed(game);
+    toggleClass($.threat, 'is-unknown', !revealed);
     for (const [k] of STATS) {
       const v = Number(ai[k]) || 0;
-      setWidth($.aiBars[k].fill, v / 10);
-      setText($.aiBars[k].val, v.toFixed(1));
+      setWidth($.aiBars[k].fill, revealed ? v / 10 : 0);
+      setText($.aiBars[k].val, revealed ? v.toFixed(1) : '??');
     }
     setWidth($.awareFill, ai.awareness);
     setText($.awareVal, fmtPct(ai.awareness));
     const n = (ai.traits || []).length;
-    setText($.traitCount, `${n} trait${n === 1 ? '' : 's'}`);
+    setText($.traitCount, revealed ? `${n} trait${n === 1 ? '' : 's'}` : 'Unconfirmed');
 
     // Response button badge: how many upgrades are buyable now
     let buyable = 0;

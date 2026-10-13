@@ -1,6 +1,6 @@
 // Country panel (right column on desktop, bottom sheet on phones).
 // Never reveals ground truth: infection numbers only when `detected`.
-import { h, setText, setWidth, toggleClass, fmtNum, fmtPct, STATUS_LABEL, visibleStatus, enableSheetSwipe } from './util.js';
+import { h, setText, setWidth, toggleClass, fmtNum, fmtPct, STATUS_LABEL, visibleStatus, enableSheetSwipe, isKnown } from './util.js';
 import { icon } from './icons.js';
 
 export class CountryPanel {
@@ -131,7 +131,7 @@ export class CountryPanel {
     if ($.pill.dataset.status !== vis) $.pill.dataset.status = vis;
     setText($.pop, fmtNum(c.population));
 
-    const detected = !!c.detected;
+    const detected = isKnown(c);
     $.split.hidden = !detected;
     $.unknown.hidden = detected;
     if (detected) {
