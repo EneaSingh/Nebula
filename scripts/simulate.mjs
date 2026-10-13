@@ -19,6 +19,8 @@ const DIFFS = opt('diff', 'casual,normal,brutal').split(',');
 const BOTS = opt('bot', 'idle,greedy').split(',');
 const VERBOSE = flag('verbose');
 const TRACE = flag('trace');
+// --ban a,b: the greedy bot never buys these upgrades (to measure what each one is worth).
+const BAN = new Set(opt('ban', '').split(',').filter(Boolean));
 
 // --------------------------------------------------------------------------- bots
 const idleBot = { name: 'idle', daily() {} };
@@ -55,7 +57,7 @@ function makeGreedy(rng) {
       }
       // Upgrades in priority order (save for the next one).
       for (const id of PRIORITY) {
-        if (g.isOwned(id)) continue;
+        if (g.isOwned(id) || BAN.has(id)) continue;
         const r = g.canBuy(id);
         if (r.ok) { g.buy(id); continue; }
         if (/Ops/.test(r.reason || '')) break;
