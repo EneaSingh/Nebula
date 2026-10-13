@@ -292,7 +292,7 @@ export class Globe {
     c.maxDistance = 6.5;
     c.minPolarAngle = 0.12;
     c.maxPolarAngle = Math.PI - 0.12;
-    c.autoRotateSpeed = 0.35;
+    c.autoRotateSpeed = 0.2;
     c.addEventListener('start', () => {
       this._idle = 0;
       this._focus = null;
@@ -419,7 +419,7 @@ export class Globe {
       d1: Math.min(dist, Math.max(want, Math.min(dist, 2.2))),
       fromDir: from.clone().normalize(),
       t: 0,
-      dur: this.reducedMotion ? 0.25 : 1.2,
+      dur: this.reducedMotion ? 0.25 : 2.0,
     };
     this._idle = 0;
   }
@@ -471,7 +471,7 @@ export class Globe {
       if (!this._userInteracted) this.camera.position.setLength(d + (want - d) * Math.min(1, dt * 1.5));
     }
     c.autoRotate = !this.reducedMotion && !this._focus && (!game || this._idle > 25) && !this._down;
-    c.autoRotateSpeed = game ? 0.25 : 0.45;
+    c.autoRotateSpeed = game ? 0.12 : 0.22;
     // Slower rotation when zoomed in.
     c.rotateSpeed = THREE.MathUtils.clamp((this.camera.position.length() - 1) * 0.28, 0.08, 0.6);
     c.update();
@@ -614,7 +614,7 @@ export class Globe {
       this._focus = {
         q0: new THREE.Quaternion(), q1: new THREE.Quaternion(),
         fromDir: from.clone().normalize(), d0: from.length(), d1: this.fitDistance, t: 0,
-        dur: this.reducedMotion ? 0.2 : 1.4,
+        dur: this.reducedMotion ? 0.2 : 2.4,
       };
     }
     this._prevFlags.fill(null);
@@ -680,13 +680,13 @@ export class Globe {
       deploy = +game.player.deployProgress || 0;
     }
     // Smooth toward targets and pack into the state texture.
-    const k = Math.min(1, dt * 3.5);
+    const k = Math.min(1, dt * 2.0);
     const data = this.stateData;
     let dirty = false;
     for (let i = 0; i < n; i++) {
       const o = i * F;
       for (let j = 0; j < 7; j++) cur[o + j] += (tgt[o + j] - cur[o + j]) * k;
-      cur[o + 7] = Math.max(0, cur[o + 7] - dt * 1.2);
+      cur[o + 7] = Math.max(0, cur[o + 7] - dt * 0.7);
       const s = i + 1;
       const p0 = s * 4, p1 = (256 + s) * 4;
       const v = [cur[o], cur[o + 1], cur[o + 2], cur[o + 3], cur[o + 4], cur[o + 5], cur[o + 6], cur[o + 7]];

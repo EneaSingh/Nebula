@@ -119,7 +119,7 @@ vec3 circuit(vec2 p, float t) {
   float padOn = (n == 1.0 || h.x > 0.82) ? 1.0 : 0.0;
   float pr = length(f);
   float pad = padOn * (1.0 - smoothstep(0.17, 0.17 + aa, pr)) * smoothstep(0.06, 0.06 + aa, pr) + padOn * (1.0 - smoothstep(0.04, 0.04 + aa, pr));
-  float flow = fract((c.x + f.x) * 0.11 + (c.y + f.y) * 0.07 - t * 0.35 + h.y * 0.3);
+  float flow = fract((c.x + f.x) * 0.11 + (c.y + f.y) * 0.07 - t * 0.16 + h.y * 0.3);
   float pulse = pow(flow, 18.0) * trace;
   return vec3(trace, pad, pulse);
 }
@@ -173,7 +173,7 @@ void main() {
 
   // ---- ocean ----
   vec3 ocean = srgb(vec3(0.010, 0.040, 0.075));
-  ocean += srgb(vec3(0.02, 0.06, 0.10)) * nz(tc * vec2(4.0, 2.0) + vec2(uTime * 0.002, 0.0)).a;
+  ocean += srgb(vec3(0.02, 0.06, 0.10)) * nz(tc * vec2(4.0, 2.0) + vec2(uTime * 0.001, 0.0)).a;
   // lat/long grid every 15 degrees
   vec2 gd = abs(fract(ll / 15.0 + 0.5) - 0.5) * 15.0;
   float gridL = 1.0 - smoothstep(0.0, gw.x * 1.5, gd.x * cos(radians(ll.y)) / max(cos(radians(ll.y)), 0.15));
@@ -186,7 +186,7 @@ void main() {
   float laneY = abs(fract((ll.y + 90.0) / 0.9) - 0.5);
   float laneOn = step(0.86, lh) * (1.0 - smoothstep(0.06, 0.06 + gw.y / 0.9 * 1.5, laneY));
   float dir = lh > 0.81 ? 1.0 : -1.0;
-  float dash = fract((ll.x + 180.0) / 360.0 * (14.0 + floor(lh * 16.0)) + dir * uTime * (0.015 + 0.03 * fract(lh * 7.0)) + lh * 3.0);
+  float dash = fract((ll.x + 180.0) / 360.0 * (14.0 + floor(lh * 16.0)) + dir * uTime * (0.007 + 0.014 * fract(lh * 7.0)) + lh * 3.0);
   float stream = pow(dash, 22.0) * laneOn * (1.0 - smoothstep(0.25, 0.9, gw.y / 0.9));
   ocean += srgb(vec3(0.24, 0.88, 1.0)) * stream * 0.16;
   // coastal glow
@@ -213,23 +213,24 @@ void main() {
   // ---- infection: hot corruption bleeding through ----
   vec3 emis = vec3(0.0);
   if (infV > 0.002) {
-    float cn = mix(tri(sp, 1.3, vec2(tt * 0.0016, tt * 0.0011)).r, tri(sp, 3.2, -vec2(tt * 0.0021, 0.0)).g, 0.3);
+    float cn = mix(tri(sp, 1.3, vec2(tt * 0.0008, tt * 0.0005)).r, tri(sp, 3.2, -vec2(tt * 0.001, 0.0)).g, 0.3);
     float thr = mix(0.92, 0.02, infV);
     float m = smoothstep(thr - 0.06, thr + 0.03, cn);
     float edge = 1.0 - smoothstep(0.0, 0.035, abs(cn - thr));
-    float pulse = 0.5 + 0.5 * sin(tt * 2.6 - cn * 26.0);
+    float pulse = 0.5 + 0.5 * sin(tt * 1.0 - cn * 18.0);
     vec3 dark = srgb(vec3(0.30, 0.02, 0.07));
     vec3 hot = srgb(vec3(1.0, 0.176, 0.333));
-    float heat = tri(sp, 2.4, vec2(-tt * 0.003, tt * 0.002)).a;
+    float heat = tri(sp, 2.4, vec2(-tt * 0.0012, tt * 0.0008)).a;
     col = mix(col * vec3(1.0, 0.45, 0.5), dark * (0.6 + 0.4 * light), min(1.0, infV * 0.8 + 0.2));
     vec3 corr = mix(srgb(vec3(0.40, 0.03, 0.10)), hot, 0.18 * pulse + 0.45 * heat * heat * heat);
     col = mix(col, corr * (0.6 + 0.4 * light), m);
     // veins of corrupted data
-    float vein = smoothstep(0.86, 0.97, tri(sp, 5.0, vec2(0.0, tt * 0.001)).b);
+    float vein = smoothstep(0.86, 0.97, tri(sp, 5.0, vec2(0.0, tt * 0.0004)).b);
     emis += hot * vein * m * (0.25 + 0.35 * pulse);
     // the dot matrix glitches hot inside corrupted areas
-    float glitch = step(0.9, hash12(floor(dp) + floor(tt * 3.0)));
-    emis += srgb(vec3(1.0, 0.3, 0.6)) * dots * m * (0.06 + 0.6 * glitch);
+    float gph = hash12(floor(dp));
+    float glitch = smoothstep(0.75, 1.0, sin(tt * 0.6 + gph * 40.0)) * step(0.8, gph);
+    emis += srgb(vec3(1.0, 0.3, 0.6)) * dots * m * (0.06 + 0.5 * glitch);
     emis += srgb(vec3(1.0, 0.24, 0.94)) * edge * (0.45 + 0.4 * pulse) * smoothstep(0.0, 0.08, infV);
   }
 
@@ -240,7 +241,7 @@ void main() {
     float lm = smoothstep(lthr - 0.04, lthr + 0.04, ln);
     vec2 cp = bandGrid(ll, 0.55, 12.0);
     vec3 ci = circuit(cp, tt);
-    vec3 ci2 = circuit(cp * 0.33 + 41.0, tt * 0.7);
+    vec3 ci2 = circuit(cp * 0.33 + 41.0, tt * 0.6);
     float cfade = 1.0 - smoothstep(0.15, 0.6, fwidth(cp.x));
     vec3 voidC = srgb(vec3(0.04, 0.012, 0.08));
     vec3 traceC = srgb(vec3(0.48, 0.17, 1.0));
@@ -256,7 +257,7 @@ void main() {
   }
 
   // ---- shutdown: grid down, flickering dark ----
-  float flick = 0.75 + 0.25 * step(0.85, hash12(vec2(floor(tt * 9.0), 3.0)));
+  float flick = 0.75 + 0.25 * smoothstep(0.3, 0.9, sin(tt * 0.9) * sin(tt * 0.37 + 1.3));
   col *= 1.0 - shut * (0.62 - 0.12 * flick);
   emis *= 1.0 - shut * 0.5;
 
@@ -269,7 +270,7 @@ void main() {
     float hs = fract((hp.x + hp.y) * 0.5);
     float aa = fwidth(hp.y) * 0.7 + 0.02;
     float hatch = smoothstep(0.5 - aa, 0.5, hs) - smoothstep(0.78, 0.78 + aa, hs);
-    float scan = pow(fract(ll.y * 0.08 - tt * 0.25), 24.0);
+    float scan = pow(fract(ll.y * 0.08 - tt * 0.1), 24.0);
     vec3 cy = srgb(vec3(0.24, 0.88, 1.0));
     emis += cy * quar * (hatch * hfade * 0.22 + (1.0 - hfade) * 0.06 + scan * 0.35);
     col = mix(col, col * 0.8 + cy * 0.03, quar);
@@ -278,7 +279,7 @@ void main() {
   // ---- kill switch / liberated: green wash ----
   if (ks > 0.01) {
     vec3 gr = srgb(vec3(0.24, 1.0, 0.60));
-    float wave = 0.5 + 0.5 * sin(tt * 1.6 - length(vObj.xy) * 6.0 + vObj.z * 6.0);
+    float wave = 0.5 + 0.5 * sin(tt * 0.7 - length(vObj.xy) * 6.0 + vObj.z * 6.0);
     col = mix(col, srgb(vec3(0.03, 0.30, 0.16)) * (0.6 + 0.4 * light), ks * 0.75);
     emis += gr * ks * (0.05 + 0.08 * wave);
   }
@@ -296,7 +297,7 @@ void main() {
   // ---- city lights (night side) ----
   float lights = det.b;
   vec3 lightC = mix(srgb(vec3(1.0, 0.86, 0.62)), srgb(vec3(1.0, 0.18, 0.4)), clamp(lost * 1.5 + infV * 0.6, 0.0, 1.0));
-  float lflick = 1.0 - infV * 0.5 * step(0.5, hash12(vec2(floor(tt * 6.0), floor(ll.x * 2.0))));
+  float lflick = 1.0 - infV * 0.4 * (0.5 + 0.5 * sin(tt * 0.8 + hash12(floor(ll * 2.0)) * 30.0));
   vec3 cityC = lightC * lights * night * (1.0 - shut) * lflick * 0.9 * (1.0 - ice);
 
   // ---- hover / selection ----
@@ -332,8 +333,8 @@ void main() {
     vec3 east = normalize(cross(vec3(0.0, 1.0, 0.0), cdir) + vec3(1e-5));
     vec3 north = cross(cdir, east);
     float ang = atan(dot(p, north), dot(p, east));
-    float march = 0.55 + 0.45 * step(0.5, fract(ang * 9.0 / 6.2832 - tt * 0.6));
-    selC = mix(cyan, vec3(1.0), 0.55) * outline * march * (0.85 + 0.15 * sin(tt * 4.0)) * 1.3;
+    float march = 0.65 + 0.35 * (0.5 + 0.5 * sin(ang * 9.0 - tt * 1.1));
+    selC = mix(cyan, vec3(1.0), 0.55) * outline * march * (0.88 + 0.12 * sin(tt * 1.2)) * 1.3;
   } else selC = vec3(0.0);
 
   // ---- compose ----
@@ -391,7 +392,7 @@ varying vec3 vColor;
 varying float vTw;
 void main() {
   vColor = aColor;
-  vTw = 0.65 + 0.35 * sin(uTime * (0.6 + aPhase * 1.7) + aPhase * 40.0);
+  vTw = 0.7 + 0.3 * sin(uTime * (0.3 + aPhase * 0.8) + aPhase * 40.0);
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
   gl_PointSize = aSize * uPixelRatio;
@@ -457,8 +458,8 @@ void main() {
   float behind = uHead - t;
   float trail = 0.35 + 0.65 * exp(-behind * 4.0);
   float head = exp(-behind * 60.0) * step(uHead, 1.0001) * 2.5;
-  float packets = pow(fract(t * 3.0 - uTime * 0.9), 10.0) * 1.6;
-  float dash = mix(1.0, step(0.45, fract(t * 48.0 - uTime * 2.0)), uDashed);
+  float packets = pow(fract(t * 3.0 - uTime * 0.4), 10.0) * 1.6;
+  float dash = mix(1.0, step(0.45, fract(t * 48.0 - uTime * 0.8)), uDashed);
   float ends = smoothstep(0.0, 0.03, t);
   float i = (trail * dash + head + packets) * uFade * ends;
   gl_FragColor = vec4(uColor * i, 1.0);

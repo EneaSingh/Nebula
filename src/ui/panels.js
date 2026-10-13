@@ -196,7 +196,7 @@ export class Toasts {
     this.msT = setTimeout(() => {
       b.classList.remove('is-in');
       setTimeout(() => { if (!b.classList.contains('is-in')) b.hidden = true; }, 450);
-    }, 4200);
+    }, 6000);
   }
 
   clear() {

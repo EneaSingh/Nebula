@@ -13,9 +13,9 @@ export function vec3ToLonLat(v) {
 }
 
 const ROUTES = {
-  cable: { color: '#ff2d55', lift: (ang) => 0.035 + 0.16 * (ang / Math.PI), radius: 0.0032, dashed: 0, speed: 0.9 },
-  satellite: { color: '#ff3df0', lift: (ang) => 0.22 + 0.22 * (ang / Math.PI), radius: 0.0026, dashed: 1, speed: 0.7 },
-  wireless: { color: '#ff7a3d', lift: (ang) => 0.012 + 0.09 * (ang / Math.PI), radius: 0.0036, dashed: 0, speed: 1.4 },
+  cable: { color: '#ff2d55', lift: (ang) => 0.035 + 0.16 * (ang / Math.PI), radius: 0.0032, dashed: 0, speed: 0.45 },
+  satellite: { color: '#ff3df0', lift: (ang) => 0.22 + 0.22 * (ang / Math.PI), radius: 0.0026, dashed: 1, speed: 0.35 },
+  wireless: { color: '#ff7a3d', lift: (ang) => 0.012 + 0.09 * (ang / Math.PI), radius: 0.0036, dashed: 0, speed: 0.7 },
 };
 
 class ArcCurve extends THREE.Curve {
@@ -176,7 +176,7 @@ export class Arcs {
     mesh.renderOrder = 2;
     this.group.add(mesh);
     const travel = (0.55 + curve.ang * 0.5) / cfg.speed;
-    const item = { mesh, mat, geom, age: 0, travel, hold: 2.2, fadeOut: 1.0, to: b.clone(), from: a.clone(), color: cfg.color, landed: false };
+    const item = { mesh, mat, geom, age: 0, travel, hold: 3.2, fadeOut: 1.6, to: b.clone(), from: a.clone(), color: cfg.color, landed: false };
     this.items.push(item);
     while (this.items.length > this.max) this._remove(0);
   }
@@ -356,13 +356,13 @@ export class Bubbles {
     const v = this._v;
     for (const it of this.items.values()) {
       it.age += dt;
-      const bob = this.reduced ? 0 : Math.sin(time * 2 + it.phase) * 0.008;
+      const bob = this.reduced ? 0 : Math.sin(time * 0.9 + it.phase) * 0.008;
       const alt = 1.075 + bob;
       it.sprite.position.copy(it.base).multiplyScalar(alt);
       const dist = it.sprite.position.distanceTo(camPos);
       const pop = Math.min(1, it.age / 0.45);
       const popE = 1 + 2.2 * Math.pow(pop - 1, 3) + 1.2 * Math.pow(pop - 1, 2); // ease-out-back
-      const pulse = this.reduced ? 1 : 1 + 0.06 * Math.sin(time * 4 + it.phase);
+      const pulse = this.reduced ? 1 : 1 + 0.05 * Math.sin(time * 1.6 + it.phase);
       const hov = this.hovered === it.id ? 1.18 : 1;
       const s = targetPx * fovK * dist * popE * pulse * hov;
       it.sprite.scale.set(s, s, 1);
@@ -527,7 +527,7 @@ export class LabMarkers {
     m.scale.set(s, s, s);
   }
   update(time, reduced) {
-    this.mat.opacity = reduced ? 0.8 : 0.65 + 0.3 * (0.5 + 0.5 * Math.sin(time * 2.2));
+    this.mat.opacity = reduced ? 0.8 : 0.65 + 0.3 * (0.5 + 0.5 * Math.sin(time * 1.0));
   }
   clear() {
     for (const m of this.markers.values()) this.group.remove(m);
