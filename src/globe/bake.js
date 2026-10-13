@@ -327,3 +327,48 @@ export function bakeNoise(N = 256) {
   }
   return out;
 }
+
+/**
+ * A representative point [lon, lat] inside each country: the given centroid if it lies inside
+ * the country, else the area centroid of its largest polygon, else the nearest pixel of the country.
+ */
+export function computeAnchors(geo, prepared, ids, W, H) {
+  const at = (lon, lat) => {
+    let x = Math.floor(((lon + 180) / 360) * W);
+    x = ((x % W) + W) % W;
+    const y = Math.min(H - 1, Math.max(0, Math.floor(((90 - lat) / 180) * H)));
+    return ids[y * W + x];
+  };
+  return geo.map((c, i) => {
+    const [lon0, lat0] = c.centroid;
+    if (at(lon0, lat0) === i + 1) return [lon0, lat0];
+    // Largest polygon's area centroid (planar shoelace on the unwrapped outer ring).
+    let best = null, bestA = 0;
+    for (const poly of prepared[i].polys) {
+      const r = poly.fill[0];
+      if (!r) continue;
+      let a = 0, cx = 0, cy = 0;
+      for (let k = 0; k < r.length; k++) {
+        const p = r[k], q = r[(k + 1) % r.length];
+        const cr = p[0] * q[1] - q[0] * p[1];
+        a += cr; cx += (p[0] + q[0]) * cr; cy += (p[1] + q[1]) * cr;
+      }
+      if (Math.abs(a) > bestA && a !== 0) { bestA = Math.abs(a); best = [cx / (3 * a), cy / (3 * a)]; }
+    }
+    let cand = best || [lon0, lat0];
+    cand[0] = ((((cand[0] + 180) % 360) + 360) % 360) - 180;
+    if (at(cand[0], cand[1]) === i + 1) return cand;
+    // Nearest pixel of this country to the candidate (coarse scan of its bbox).
+    const [lo0, lo1, la0, la1] = prepared[i].bbox;
+    let bd = Infinity, bp = cand;
+    const step = Math.max(0.05, Math.min(lo1 - lo0, la1 - la0) / 60);
+    for (let la = la0; la <= la1; la += step) {
+      for (let lo = lo0; lo <= lo1; lo += step) {
+        if (at(lo, la) !== i + 1) continue;
+        const d = (lo - cand[0]) ** 2 + (la - cand[1]) ** 2;
+        if (d < bd) { bd = d; bp = [((((lo + 180) % 360) + 360) % 360) - 180, la]; }
+      }
+    }
+    return bp;
+  });
+}

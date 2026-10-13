@@ -239,11 +239,24 @@ export function templateCount() {
   return n;
 }
 
+const MINOR_GAP_DAYS = 9;
+const MAJOR = /^(firstDetection|firstFallen|milestone|research\d|deployDone|escalate|setback|trait\.)/;
+const PLAYER = /^(upgrade\.|fundLab|quarantineO|shutdownO|investigateClean)/;
+
 export class NewsDesk {
   constructor(game, rng) {
     this.game = game;
     this.rng = rng;
     this.recent = [];
+    this.lastDay = -Infinity;
+  }
+
+  // Headlines are paced so the ticker stays readable. Major events and reactions to the
+  // player's own actions always run; background chatter needs a quiet gap first.
+  allowed(key) {
+    if (MAJOR.test(key) || PLAYER.test(key)) return true;
+    const gap = key === 'fallen' || key === 'liberated' ? MINOR_GAP_DAYS / 2 : MINOR_GAP_DAYS;
+    return this.game.day - this.lastDay >= gap;
   }
 
   fill(tpl, vars) {
@@ -264,6 +277,7 @@ export class NewsDesk {
   }
 
   post(key, severity, vars = {}, countryIndex) {
+    if (!this.allowed(key)) return;
     const path = key.split('.');
     let list = T;
     for (const p of path) list = list ? list[p] : null;
@@ -277,6 +291,7 @@ export class NewsDesk {
     const text = this.fill(tpl, { ai: this.game.ai.name, c: c ? c.name : '', ...vars });
     const payload = { text: text.replace(/\.\.(?!\.)/g, '.'), severity };
     if (countryIndex != null) payload.countryIndex = countryIndex;
+    this.lastDay = this.game.day;
     this.game.emit('news', payload);
   }
 }

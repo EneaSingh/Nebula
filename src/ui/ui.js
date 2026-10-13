@@ -126,6 +126,32 @@ export class UI {
     this.dossier.update(game);
     this.tree.refresh();
     this.checkMilestones(game);
+    this.layoutToasts();
+  }
+
+  /** Keep toasts in the free band between open side panels (desktop/tablet). */
+  layoutToasts() {
+    const st = this.toasts.el.style;
+    const key = [this.mode, isPhone(), this.dossier.el.hidden, this.news.el.hidden, this.country.isOpen, this.root.clientWidth].join();
+    if (key === this.toastKey) return;
+    this.toastKey = key;
+    st.removeProperty('left');
+    st.removeProperty('width');
+    st.removeProperty('bottom');
+    if (isPhone() || this.mode !== 'playing') return;
+    const vw = this.root.clientWidth;
+    let L = 0;
+    let R = vw;
+    const side = !this.dossier.el.hidden ? this.dossier.el : !this.news.el.hidden ? this.news.el : null;
+    if (side) L = side.offsetLeft + side.offsetWidth;
+    if (this.country.isOpen) R = this.country.el.offsetLeft;
+    const band = R - L - 24;
+    const w = Math.max(240, Math.min(420, band));
+    const center = L + 12 + band / 2;
+    st.left = `${Math.round(center)}px`;
+    st.width = `${Math.round(w)}px`;
+    const threat = this.hud.$.threat;
+    if (center - w / 2 < threat.offsetLeft + threat.offsetWidth + 8) st.bottom = 'var(--bb-reserve-l, var(--bb-reserve))';
   }
 
   selectCountry(index) {
@@ -151,6 +177,7 @@ export class UI {
   }
 
   toast(text, severity = 'info', ic) {
+    this.layoutToasts();
     this.toasts.toast(text, severity, ic);
   }
 

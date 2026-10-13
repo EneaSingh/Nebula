@@ -80,8 +80,9 @@ vec4 tri(vec3 p, float s, vec2 o) {
   return nz(p.yz * s + o) * w.x + nz(p.zx * s + o + 0.37) * w.y + nz(p.xy * s + o + 0.71) * w.z;
 }
 float idAt(vec2 tc) { return floor(texture2D(uIds, tc).r * 255.0 + 0.5); }
-vec4 st0(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.25)); }
-vec4 st1(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.75)); }
+vec4 st0(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.125)); }
+vec4 st1(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.375)); }
+float anchorLon(float id) { return texture2D(uState, vec2((id + 0.5) / 256.0, 0.625)).r * 360.0 - 180.0; }
 
 bool inBox(vec2 tc, vec4 box, vec2 m) {
   return tc.x >= box.x - m.x && tc.x <= box.y + m.x && tc.y >= box.z - m.y && tc.y <= box.w + m.y;
@@ -261,10 +262,12 @@ void main() {
 
   // ---- quarantine: cyan hatching + sweeping scanline ----
   if (quar > 0.01) {
-    vec2 hp = bandGrid(ll, 0.35, 16.0);
-    float hfade = 1.0 - smoothstep(0.2, 0.6, fwidth(hp.x));
+    // local equal-area-ish coords around the country's anchor meridian (seam lies outside it)
+    float dlon = mod(ll.x - anchorLon(idN) + 540.0, 360.0) - 180.0;
+    vec2 hp = vec2(dlon * cos(radians(ll.y)), ll.y) / 0.35;
+    float hfade = 1.0 - smoothstep(0.25, 0.7, fwidth(hp.y));
     float hs = fract((hp.x + hp.y) * 0.5);
-    float aa = fwidth(hp.x + hp.y) * 0.5 + 0.02;
+    float aa = fwidth(hp.y) * 0.7 + 0.02;
     float hatch = smoothstep(0.5 - aa, 0.5, hs) - smoothstep(0.78, 0.78 + aa, hs);
     float scan = pow(fract(ll.y * 0.08 - tt * 0.25), 24.0);
     vec3 cy = srgb(vec3(0.24, 0.88, 1.0));

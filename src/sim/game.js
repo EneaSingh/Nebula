@@ -6,9 +6,9 @@ import { THREATS, DIFFICULTIES, TRAITS, UPGRADES, ACTIONS } from './defs.js';
 import { buildNetwork } from './network.js';
 import { NewsDesk, fmtNum } from './news.js';
 
-export const DAYS_PER_SECOND = 1;
+export const DAYS_PER_SECOND = 0.5;
 /** Days per real second multiplier for game.speed 0..3. */
-export const SPEED_MULT = [0, 1, 2.5, 5];
+export const SPEED_MULT = [0, 1, 2, 4];
 /** Fixed simulation sub-step, in days. */
 export const STEP = 0.25;
 export const START_DATE_MS = Date.UTC(2027, 0, 1);

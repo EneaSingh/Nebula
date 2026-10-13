@@ -1,6 +1,6 @@
 // Country panel (right column on desktop, bottom sheet on phones).
 // Never reveals ground truth: infection numbers only when `detected`.
-import { h, setText, setWidth, toggleClass, fmtNum, fmtPct, STATUS_LABEL, visibleStatus } from './util.js';
+import { h, setText, setWidth, toggleClass, fmtNum, fmtPct, STATUS_LABEL, visibleStatus, enableSheetSwipe } from './util.js';
 import { icon } from './icons.js';
 
 export class CountryPanel {
@@ -60,6 +60,7 @@ export class CountryPanel {
         h('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Close country panel', html: icon('close'), onclick: () => this.ui.cb.onSelectCountry?.(null) })),
       h('div', { class: 'cp-scroll' }, $.body, $.empty));
     root.append(this.el);
+    enableSheetSwipe(this.el, [this.el.querySelector('.sheet-grip'), this.el.querySelector('.cp-head')], () => this.ui.cb.onSelectCountry?.(null));
     this.actionRows = new Map();
     this.buildActions();
   }

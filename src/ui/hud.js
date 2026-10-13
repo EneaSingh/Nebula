@@ -121,10 +121,8 @@ export class Hud {
 
     // ticker state
     this.queue = [];
+    this.current = null;
     this.running = false;
-    this.offset = 0;
-    this.lastT = 0;
-    this.idleSince = 0;
   }
 
   show() {
@@ -167,8 +165,8 @@ export class Hud {
 
   reset() {
     this.queue = [];
+    this.current = null;
     this.$.track.replaceChildren();
-    this.offset = 0;
     this.lastSpeed = null;
   }
 
@@ -250,12 +248,19 @@ export class Hud {
   }
 
   // ---------------- news ticker ----------------
+  // Calm, one-headline-at-a-time ticker: each headline fades in and holds for at
+  // least HOLD_MS. Long headlines pan slowly (PAN_PX_S) after a short pause.
+  // Backlog drops the oldest info items first; danger/good are never dropped.
   pushNews(n) {
     this.queue.push(n);
-    if (this.queue.length > 12) this.queue.splice(0, this.queue.length - 12);
-    this.$.tickerLive.textContent = '';
+    while (this.queue.length > QUEUE_MAX) {
+      let k = this.queue.findIndex((x) => (x.severity || 'info') === 'info');
+      if (k < 0) k = this.queue.findIndex((x) => x.severity === 'warn');
+      if (k < 0) break; // only danger/good left: keep them all
+      this.queue.splice(k, 1);
+    }
     if (n.severity === 'danger' || n.severity === 'good') this.$.tickerLive.textContent = n.text;
-    if (reducedMotion()) this.showStatic();
+    if (!this.current) this.showNext();
   }
 
   makeItem(n) {
@@ -265,49 +270,54 @@ export class Hud {
       h('span', { class: 'tick-text', text: n.text }));
   }
 
-  showStatic() {
+  showNext() {
     const n = this.queue.shift();
     if (!n) return;
-    this.$.track.replaceChildren(this.makeItem(n));
-    this.$.track.classList.add('is-static');
-    this.$.track.style.transform = 'none';
+    const track = this.$.track;
+    const old = track.querySelector('.tick-item:not(.is-leaving)');
+    if (old) {
+      old.classList.add('is-leaving');
+      setTimeout(() => old.remove(), 600);
+    }
+    const item = this.makeItem(n);
+    item.classList.add('is-entering');
+    track.append(item);
+    const calm = reducedMotion();
+    // Measure overflow of the headline inside the viewport.
+    const vpW = this.$.tickerVp.clientWidth;
+    const over = Math.max(0, item.scrollWidth - (vpW - 28));
+    let hold = HOLD_MS;
+    if (over > 0 && !calm) {
+      const panMs = (over / PAN_PX_S) * 1000;
+      item.style.setProperty('--pan', `${-over}px`);
+      item.style.setProperty('--pan-ms', `${Math.round(panMs)}ms`);
+      item.classList.add('is-long');
+      hold = Math.max(HOLD_MS, PAN_DELAY_MS + panMs + 2500);
+    } else if (over > 0) {
+      item.classList.add('is-clipped');
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => item.classList.remove('is-entering')));
+    // A backlog shortens holds a little, never below the floor.
+    if (this.queue.length >= 3) hold = Math.max(MIN_HOLD_MS, hold * 0.8);
+    this.current = { item, until: performance.now() + hold };
   }
 
   startTicker() {
     if (this.running) return;
     this.running = true;
-    this.lastT = performance.now();
     const gen = (this.gen = (this.gen || 0) + 1);
-    const step = (t) => {
+    const step = () => {
       if (!this.running || gen !== this.gen) return;
-      const dt = Math.min(0.1, (t - this.lastT) / 1000);
-      this.lastT = t;
-      if (!reducedMotion()) this.tickMarquee(dt);
-      requestAnimationFrame(step);
+      if (this.current && performance.now() >= this.current.until && this.queue.length) this.showNext();
+      else if (!this.current && this.queue.length) this.showNext();
+      setTimeout(step, 250);
     };
-    requestAnimationFrame(step);
-  }
-
-  tickMarquee(dt) {
-    const track = this.$.track;
-    const vpW = this.$.tickerVp.clientWidth;
-    if (!vpW) return;
-    // Faster when there's a backlog so headlines don't go stale.
-    const speed = 70 + Math.min(6, this.queue.length) * 22;
-    if (track.childElementCount) this.offset -= speed * dt;
-    // Remove items that scrolled out on the left.
-    let first = track.firstElementChild;
-    while (first && this.offset + first.offsetWidth < 0) {
-      this.offset += first.offsetWidth;
-      first.remove();
-      first = track.firstElementChild;
-    }
-    // Append the next headline when there's room on the right.
-    const contentRight = this.offset + track.scrollWidth;
-    if (this.queue.length && contentRight < vpW - 8) {
-      if (!track.childElementCount) this.offset = vpW;
-      track.append(this.makeItem(this.queue.shift()));
-    }
-    track.style.transform = `translate3d(${this.offset.toFixed(1)}px,0,0)`;
+    step();
   }
 }
+
+const HOLD_MS = 7000;
+const MIN_HOLD_MS = 6000;
+const PAN_DELAY_MS = 1800;
+const PAN_PX_S = 45;
+const QUEUE_MAX = 6;

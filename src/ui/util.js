@@ -127,3 +127,35 @@ export function visibleStatus(c) {
   if (!c.detected) return 'unknown';
   return c.status || 'infected';
 }
+
+/** Phone bottom sheets: drag the grip/header down to dismiss. */
+export function enableSheetSwipe(sheet, handles, onClose) {
+  let y0 = null;
+  let dy = 0;
+  const down = (e) => {
+    if (!isPhone() || e.target.closest('button')) return;
+    y0 = e.clientY;
+    dy = 0;
+    sheet.style.transition = 'none';
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const move = (e) => {
+    if (y0 == null) return;
+    dy = Math.max(0, e.clientY - y0);
+    sheet.style.transform = `translateY(${dy}px)`;
+  };
+  const up = () => {
+    if (y0 == null) return;
+    y0 = null;
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+    if (dy > 70) onClose();
+  };
+  for (const hd of handles) {
+    hd.style.touchAction = 'none';
+    hd.addEventListener('pointerdown', down);
+    hd.addEventListener('pointermove', move);
+    hd.addEventListener('pointerup', up);
+    hd.addEventListener('pointercancel', up);
+  }
+}

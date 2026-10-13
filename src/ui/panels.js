@@ -1,5 +1,5 @@
 // Side panels (AI dossier, news log), toasts, milestone banners and hover tooltip.
-import { h, setText, setWidth, fmtNum, fmtPct, pad3, STATUS_LABEL, visibleStatus } from './util.js';
+import { h, setText, setWidth, fmtNum, fmtPct, pad3, STATUS_LABEL, visibleStatus, enableSheetSwipe } from './util.js';
 import { icon } from './icons.js';
 
 const CATS = [
@@ -17,6 +17,7 @@ function sidePanel(ui, id, title, kicker, ...body) {
       h('div', {}, h('span', { class: 'micro', text: kicker }), h('h2', { id: `ks-${id}-title`, text: title })),
       close),
     scroll);
+  enableSheetSwipe(el, [el.querySelector('.sheet-grip'), el.querySelector('.side-head')], () => ui.closePanel(id));
   return { el, scroll };
 }
 
@@ -125,6 +126,10 @@ export class NewsLog {
   }
 }
 
+const TOAST_MAX = 3;
+const TOAST_HOLD_MS = 5000;
+const TOAST_GAP_MS = 900;
+
 const SEV_ICON = { info: 'info', warn: 'alert', danger: 'alert', good: 'check' };
 
 export class Toasts {
@@ -134,18 +139,49 @@ export class Toasts {
     root.append(this.el, this.banner);
   }
 
+  // Toasts are paced: at most one new toast every TOAST_GAP_MS, at most
+  // TOAST_MAX on screen, each held >= TOAST_HOLD_MS. Backlog drops oldest info first.
   toast(text, severity = 'info', ic) {
+    this.pending = this.pending || [];
+    this.pending.push({ text, severity, ic });
+    while (this.pending.length > 5) {
+      let k = this.pending.findIndex((x) => x.severity === 'info');
+      if (k < 0) k = this.pending.findIndex((x) => x.severity === 'warn');
+      if (k < 0) k = 0;
+      this.pending.splice(k, 1);
+    }
+    this.pump();
+  }
+
+  pump() {
+    if (this.pumpT || !this.pending?.length) return;
+    const wait = Math.max(0, (this.lastShown || 0) + TOAST_GAP_MS - performance.now());
+    this.pumpT = setTimeout(() => {
+      this.pumpT = null;
+      const t = this.pending.shift();
+      if (t) this.showToast(t);
+      this.pump();
+    }, wait);
+  }
+
+  showToast({ text, severity, ic }) {
+    this.lastShown = performance.now();
     const t = h('div', { class: `toast sev-${severity}` },
       h('span', { class: 'toast-ico', html: icon(ic || SEV_ICON[severity] || 'info') }),
       h('span', { class: 'toast-text', text }));
     this.el.append(t);
-    while (this.el.childElementCount > 4) this.el.firstElementChild.remove();
-    requestAnimationFrame(() => t.classList.add('is-in'));
-    setTimeout(() => {
-      t.classList.remove('is-in');
-      t.classList.add('is-out');
-      setTimeout(() => t.remove(), 400);
-    }, severity === 'danger' ? 5200 : 4200);
+    const live = [...this.el.children].filter((x) => !x.classList.contains('is-out'));
+    if (live.length > TOAST_MAX) this.dismiss(live[0]);
+    requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('is-in')));
+    t._timer = setTimeout(() => this.dismiss(t), severity === 'danger' || severity === 'good' ? TOAST_HOLD_MS + 1500 : TOAST_HOLD_MS);
+  }
+
+  dismiss(t) {
+    if (!t || t.classList.contains('is-out')) return;
+    clearTimeout(t._timer);
+    t.classList.remove('is-in');
+    t.classList.add('is-out');
+    setTimeout(() => t.remove(), 550);
   }
 
   milestone(title, sub, severity = 'info', ic = 'alert') {
@@ -164,6 +200,9 @@ export class Toasts {
   }
 
   clear() {
+    this.pending = [];
+    clearTimeout(this.pumpT);
+    this.pumpT = null;
     this.el.replaceChildren();
     this.banner.hidden = true;
   }

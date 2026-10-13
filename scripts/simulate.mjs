@@ -162,7 +162,7 @@ function checks() {
   // Real-time tick path.
   const g = new Game({ geo: GEO, seed: 9 });
   g.speed = 3; for (let i = 0; i < 600; i++) g.tick(1 / 60);
-  console.log(`tick(): 10s at speed 3 -> day ${g.day.toFixed(2)} (expect ~50)`);
+  console.log(`tick(): 10s at speed 3 -> day ${g.day.toFixed(2)} (expect ~20)`);
   g.speed = 0; const d0 = g.day; g.tick(1); console.log(`paused tick no-op: ${g.day === d0 ? 'OK' : 'FAIL'}`);
   console.log(`date: ${g.date.toISOString().slice(0, 10)}`);
   // Action / upgrade semantics.

@@ -6,7 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { prepareGeo, bakeIds, bakeGlow, bakeDetail, bakeNoise } from './bake.js';
+import { prepareGeo, bakeIds, bakeGlow, bakeDetail, bakeNoise, computeAnchors } from './bake.js';
 import {
   earthVertex, earthFragment, atmoVertex, atmoFragment,
   starsVertex, starsFragment, skyVertex, skyFragment,
@@ -194,8 +194,8 @@ export class Globe {
     this.noiseTex = noiseTex;
 
     // Per-country state: 256 x 2 RGBA8, slot = index + 1 (slot 0 = ocean).
-    this.stateData = new Uint8Array(256 * 2 * 4);
-    this.stateTex = new THREE.DataTexture(this.stateData, 256, 2, THREE.RGBAFormat, THREE.UnsignedByteType);
+    this.stateData = new Uint8Array(256 * 4 * 4);
+    this.stateTex = new THREE.DataTexture(this.stateData, 256, 4, THREE.RGBAFormat, THREE.UnsignedByteType);
     this.stateTex.magFilter = this.stateTex.minFilter = THREE.NearestFilter;
     this.stateTex.needsUpdate = true;
     // Current (smoothed) and target per-country values.
@@ -205,8 +205,11 @@ export class Globe {
     this._prevFlags = new Array(this.n).fill(null);
     this.geo.forEach((c, i) => { if (c.id === '010') { this.cur[i * F + 6] = this.tgt[i * F + 6] = 1; } });
 
-    // Country centroid directions + uv boxes.
-    this.dirs = this.geo.map((c) => lonLatToVec3(c.centroid[0], c.centroid[1], 1));
+    // Anchor point inside each country (centroids of e.g. France fall in the sea) + uv boxes.
+    this.anchors = computeAnchors(this.geo, this.prepared, this.ids, W, H);
+    this.dirs = this.anchors.map(([lon, lat]) => lonLatToVec3(lon, lat, 1));
+    // Row 2 of the state texture: anchor longitude (static), used for seam-free local patterns.
+    this.anchors.forEach(([lon], i) => { this.stateData[(512 + i + 1) * 4] = Math.round(((lon + 180) / 360) * 255); });
     this.boxes = this.prepared.map(({ bbox }) => {
       let [lo0, lo1, la0, la1] = bbox;
       let u0 = (lo0 + 180) / 360, u1 = (lo1 + 180) / 360;
@@ -395,7 +398,7 @@ export class Globe {
     u.uSel.value = i == null ? 0 : i + 1;
     if (i != null) {
       u.uSelBox.value.copy(this.boxes[i]);
-      const [lon, lat] = this.geo[i].centroid;
+      const [lon, lat] = this.anchors[i];
       u.uSelCenter.value.set((lon * Math.PI) / 180, (lat * Math.PI) / 180);
       this.surfaceFx.ring(this.dirs[i], '#3de0ff', { size: 0.12, life: 0.8, grow: 1 });
     }
@@ -403,7 +406,7 @@ export class Globe {
 
   focusCountry(index) {
     if (index == null || index < 0 || index >= this.n) return;
-    const [lon, lat] = this.geo[index].centroid;
+    const [lon, lat] = this.anchors[index];
     const target = lonLatToVec3(lon, THREE.MathUtils.clamp(lat, -72, 72), 1);
     const from = this.camera.position.clone();
     const dist = from.length();
