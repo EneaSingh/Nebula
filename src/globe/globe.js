@@ -645,7 +645,7 @@ export class Globe {
       const fi = pop > 0 ? infected / pop : 0;
       const fl = pop > 0 ? lost / pop : 0;
       tgt[o] = detected && infected > 0 ? Math.min(1, 0.12 + 0.88 * Math.pow(fi, 0.35)) : 0;
-      tgt[o + 1] = showLost && lost > 0 ? Math.min(1, 0.1 + 0.9 * Math.pow(fl, 0.5)) : 0;
+      tgt[o + 1] = showLost && lost > 0 ? Math.min(1, 0.03 + 0.97 * Math.pow(fl, 0.45)) : 0;
       tgt[o + 2] = c.quarantined ? 1 : 0;
       tgt[o + 3] = c.shutdown ? 1 : 0;
       const lab = Math.max(0, Math.min(3, c.labLevel | 0));
