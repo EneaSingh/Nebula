@@ -7,6 +7,8 @@
 // Self-hosted broker: add ?peer=host:port to the URL (kept in shared links).
 
 const PREFIX = 'briscola-v1-';
+const HEARTBEAT_EVERY = 2000;
+const HEARTBEAT_TIMEOUT = 25000;
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export function newRoomCode() {
@@ -95,11 +97,26 @@ export class Room {
 
   _attach(conn) {
     this.conn = conn;
-    conn.on('open', () => this.h.onJoin?.());
+    // WebRTC can take a minute to notice a vanished peer (closed laptop,
+    // dropped Wi-Fi), so both sides ping and give up after a silence.
+    let lastSeen = Date.now();
+    let beat = 0;
+    conn.on('open', () => {
+      lastSeen = Date.now();
+      beat = setInterval(() => {
+        if (Date.now() - lastSeen > HEARTBEAT_TIMEOUT) {
+          gone();
+          conn.close();
+        } else if (conn.open) conn.send({ t: 'ping' });
+      }, HEARTBEAT_EVERY);
+      this.h.onJoin?.();
+    });
     conn.on('data', (msg) => {
-      if (msg && typeof msg === 'object' && typeof msg.t === 'string') this.h.onMessage?.(msg);
+      lastSeen = Date.now();
+      if (msg && typeof msg === 'object' && typeof msg.t === 'string' && msg.t !== 'ping') this.h.onMessage?.(msg);
     });
     const gone = () => {
+      clearInterval(beat);
       if (this.conn !== conn) return;
       this.conn = null;
       if (!this.closed) this.h.onLeave?.();

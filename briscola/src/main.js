@@ -56,9 +56,11 @@ const pose = {
     const mid = (n - 1) / 2;
     if (s === 0) {
       // Tilt the hand to face the camera (which looks down more steeply in portrait).
-      const gap = view.portrait ? 1.08 : 1.22;
+      const gap = view.portrait ? 1.12 : 1.22;
       const tilt = view.portrait ? 0.5 : 0.95;
-      return [v3((i - mid) * gap, 1.25 - Math.abs(i - mid) * 0.06, 3.35), v3(FACE_UP + tilt, 0, -(i - mid) * 0.06)];
+      const lift = view.portrait ? 2.6 : 1.25; // closer to the camera = bigger on phones
+      const z = view.portrait ? 4.4 : 3.35; // phones: use the empty space below the table
+      return [v3((i - mid) * gap, lift - Math.abs(i - mid) * 0.06, z), v3(FACE_UP + tilt, 0, -(i - mid) * 0.06)];
     }
     return [v3((i - mid) * 1.12, 0.012 + i * 0.003, -3.05), v3(FACE_DOWN, 0, (i - mid) * 0.07)];
   },
@@ -630,7 +632,7 @@ window.addEventListener('keydown', (e) => {
     if (c) pickResolve(c.id);
   }
 });
-window.addEventListener('beforeunload', () => session.room?.close());
+window.addEventListener('pagehide', () => session.room?.close());
 
 view.onResize = () => {
   if (game?.trumpSuit) layoutHand(session.me, { duration: 0.2 });
